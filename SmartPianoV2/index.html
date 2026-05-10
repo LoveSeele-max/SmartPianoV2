@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能钢琴练习助手 - MusicXML/MIDI曲谱解析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
+    <script type="module" src="app.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+        .note-waiting {
+            animation: pulse-wait 1.5s infinite;
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.6), inset 0 0 10px rgba(255,255,255,0.2);
+            z-index: 10;
+        }
+
+        @keyframes pulse-wait {
+            0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(234, 179, 8, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); }
+        }
+
+        .key-white {
+            background-color: #f8fafc;
+            color: #64748b;
+            border: 1px solid #cbd5e1;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            transition: background-color 0.1s;
+            touch-action: none;
+        }
+        .key-pressed {
+            background-color: #ef4444 !important;
+            color: white !important;
+        }
+
+        .midi-status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }
+        .midi-connected { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .midi-disconnected { background-color: #ef4444; }
+
+        .file-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .badge-xml { background: #22c55e; color: #000; }
+        .badge-midi { background: #3b82f6; color: #fff; }
+        .badge-json { background: #eab308; color: #000; }
+        .badge-mxl { background: #a855f7; color: #fff; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .parse-progress { transition: width 0.3s ease; }
+
+        /* 自定义进度条样式 */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #818cf8;
+            cursor: pointer;
+            margin-top: -4px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 8px;
+            background: #475569;
+            border-radius: 4px;
+        }
+
+        /* Canvas 卷帘窗样式 */
+        #sheet-canvas {
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        /* 播放列表样式 */
+        .playlist-item {
+            transition: all 0.2s ease;
+        }
+        .playlist-item:hover {
+            background: rgba(71, 85, 105, 0.8);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden select-none">
+
+    <header class="bg-slate-900 p-4 shadow-lg flex flex-col md:flex-row justify-between items-center z-20 border-b border-slate-700">
+        <div class="flex items-center gap-4 mb-4 md:mb-0">
+            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center font-bold text-white shadow-lg">🎹</div>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider text-slate-100">智能练习助手</h1>
+                <div class="text-xs text-slate-400 flex items-center gap-2 mt-1">
+                    <span id="midi-dot" class="midi-status-dot midi-disconnected"></span>
+                    <span id="midi-status-text">初始化中...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-3 bg-slate-800 p-2 rounded-xl border border-slate-700 shadow-inner">
+            <label class="bg-blue-600 hover:bg-blue-500 cursor-pointer text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-md shadow-blue-900/50 flex items-center gap-2" title="支持 MusicXML(.xml/.mxl)、MIDI(.mid/.midi)、JSON 曲谱文件">
+                <span>📂 传曲谱</span>
+                <input type="file" id="upload-sheet" class="hidden" accept=".xml,.mxl,.mid,.midi,.json">
+            </label>
+
+            <div class="hidden md:flex items-center gap-1.5 text-xs">
+                <span class="file-badge badge-xml">XML</span>
+                <span class="file-badge badge-mxl">MXL</span>
+                <span class="file-badge badge-midi">MID</span>
+                <span class="file-badge badge-json">JSON</span>
+            </div>
+
+            <div class="h-6 w-px bg-slate-600 mx-1"></div>
+
+            <div class="flex bg-slate-900 rounded-lg p-1 relative">
+                <button id="mode-auto" class="px-4 py-2 rounded-md text-sm font-semibold transition-all duration-300 z-10 w-24">自动播放</button>
+                <button id="mode-wait" class="px-4 py-2 rounded-md text-sm font-semibold transition-all duration-300 z-10 w-24 text-slate-400">练习模式</button>
+                <div id="mode-slider" class="absolute top-1 left-1 w-24 h-[calc(100%-8px)] bg-indigo-600 rounded-md transition-all duration-300"></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="bg-slate-800 text-center py-2 text-sm text-indigo-300 border-b border-slate-700 font-medium">
+        当前曲目: <span id="current-song-name" class="text-white font-bold">《小星星》</span> | 
+        <span id="instruction-text">内置《小星星》示例曲谱。点击 📂 传曲谱 上传文件开始练习。</span>
+    </div>
+
+    <main class="flex-1 relative overflow-y-auto bg-slate-900 p-6 no-scrollbar flex flex-col justify-start">
+        
+        <div class="max-w-6xl mx-auto w-full mb-2 flex flex-col md:flex-row items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-md gap-4 z-10 relative">
+            <div class="flex items-center gap-3 shrink-0">
+                <button id="btn-play-pause" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold transition-colors shadow-md w-24">播放</button>
+                <button id="btn-reset" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold transition-colors shadow-md">重置</button>
+            </div>
+
+            <div class="flex-1 w-full flex items-center gap-3">
+                <button id="btn-skip-backward" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white shrink-0" title="-1小节(按4拍算)">⏮ -4拍</button>
+                <input type="range" id="progress-slider" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0" step="0.1">
+                <button id="btn-skip-forward" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white shrink-0" title="+1小节(按4拍算)">+4拍 ⏭</button>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
+                <span class="text-xs text-slate-400">BPM</span>
+                <input type="number" id="bpm-ui" class="font-mono font-bold text-indigo-400 text-lg w-14 text-center bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500 rounded" value="100" min="10" max="300" title="调整播放速度">
+            </div>
+            <div class="flex items-center gap-2 shrink-0 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
+                <span class="text-xs text-slate-400">音量</span>
+                <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="1.2" class="w-20">
+            </div>
+        </div>
+
+        <!-- 卷帘窗容器（Canvas 渲染） -->
+        <div id="sheet-container" class="relative w-full max-w-6xl mx-auto h-64 bg-slate-800/80 rounded-xl overflow-hidden border border-slate-700 shadow-inner mt-2"></div>
+
+        <!-- 本地曲谱播放列表 -->
+        <div class="max-w-6xl mx-auto w-full mt-3 bg-slate-800/60 rounded-xl border border-slate-700/50 p-2">
+            <div class="flex items-center justify-between mb-1 px-2">
+                <span class="text-xs text-slate-400 font-semibold tracking-wide">📋 本地曲谱库</span>
+                <span class="text-xs text-slate-500" id="playlist-count"></span>
+            </div>
+            <div id="playlist-container">
+                <div class="text-slate-500 text-sm p-4 text-center">加载中...</div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-slate-800 h-40 border-t-4 border-slate-950 p-2 overflow-x-auto shadow-[0_-10px_20px_rgba(0,0,0,0.3)]">
+        <div class="flex h-full min-w-max mx-auto justify-center relative" id="virtual-keyboard"></div>
+    </footer>
+
+    <div id="parse-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
+        <h2 class="text-xl font-bold text-white mb-4" id="parse-modal-title">正在解析曲谱...</h2>
+        <div class="w-72 bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-600 shadow-inner">
+            <div id="parse-progress-bar" class="parse-progress h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full" style="width: 0%"></div>
+        </div>
+        <p class="text-slate-400 mt-4 text-sm" id="parse-modal-detail">读取文件中...</p>
+    </div>
+
+    <script>
+        // Service Worker 注册（音色离线缓存）
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then((registration) => {
+                        console.log('[SW] ServiceWorker 注册成功:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.warn('[SW] ServiceWorker 注册失败:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>

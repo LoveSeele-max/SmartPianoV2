@@ -1,0 +1,13 @@
+# 系统文件
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+
+# 备份文件
+SmartPiano2_legacy.html
+
+# 编辑器
+.idea/
+.vscode/
+*.sublime-*
