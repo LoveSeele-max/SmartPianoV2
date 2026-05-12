@@ -96,34 +96,27 @@ function renderSheet() {
     progressSlider.max = globalTotalBeats;
     progressSlider.value = currentBeat;
 
-    // 创建 Canvas 元素
+        // 创建 Canvas 元素
     sheetCanvas = document.createElement('canvas');
     sheetCanvas.id = 'sheet-canvas';
-    sheetCanvas.className = 'w-full h-64 rounded-xl';
+    sheetCanvas.className = 'h-full w-full rounded-2xl';
     sheetCanvas.width = sheetContainer.clientWidth || 1200;
-    sheetCanvas.height = 256;
-    sheetContainer.classList.add('relative', 'w-full', 'max-w-6xl', 'mx-auto', 'h-64', 'bg-slate-800/80', 'rounded-xl', 'overflow-hidden', 'border', 'border-slate-700', 'shadow-inner', 'mt-2');
+    sheetCanvas.height = sheetContainer.clientHeight || 320;
     sheetContainer.appendChild(sheetCanvas);
 
     canvasCtx = sheetCanvas.getContext('2d');
     drawSheet(currentBeat);
 }
 
-/** 绘制圆角矩形（兼容性方案，替代 canvas roundRect） */
-function roundRect(ctx, x, y, w, h, r) {
-    if (ctx.roundRect) {
-        ctx.roundRect(x, y, w, h, r);
-    } else {
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-    }
+/** 绘制胶囊型发光音符 */
+function drawCapsule(ctx, x, y, width, height) {
+    const radius = height / 2;
+    const safeWidth = Math.max(width, height);
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + safeWidth - radius, y);
+    ctx.arc(x + safeWidth - radius, y + radius, radius, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x + radius, y + height);
+    ctx.arc(x + radius, y + radius, radius, Math.PI / 2, -Math.PI / 2);
 }
 
 /** Canvas 绘制卷帘窗 */
@@ -133,109 +126,211 @@ function drawSheet(beatPosition) {
     const ctx = canvasCtx;
     const w = sheetCanvas.width;
     const h = sheetCanvas.height;
-    const pixelsPerBeat = 120;
+    const gutterW = 58;
+    const rulerH = 34;
+    const bottomPad = 22;
+    const playheadX = gutterW + (w - gutterW) * 0.43;
+    const pixelsPerBeat = Math.max(88, Math.min(128, (w - gutterW) / 10));
+    const visibleLeftBeats = (playheadX - gutterW) / pixelsPerBeat;
+    const visibleRightBeats = (w - playheadX) / pixelsPerBeat;
+    const trackTop = rulerH + 8;
+    const trackBottom = h - bottomPad;
+    const trackHeight = Math.max(120, trackBottom - trackTop);
 
-    // 清空画布
-    ctx.clearRect(0, 0, w, h);
-
-    // 绘制背景
-    ctx.fillStyle = '#1e293b';
+    ctx.save();
+    ctx.fillStyle = isPlaying ? 'rgba(9, 9, 11, 0.34)' : '#09090b';
     ctx.fillRect(0, 0, w, h);
-    ctx.globalAlpha = 0.3;
 
-    // 绘制节拍网格线
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 0.5;
-    const startBeat = Math.floor(beatPosition - w / pixelsPerBeat / 2);
-    const endBeat = Math.ceil(beatPosition + w / pixelsPerBeat / 2);
-    for (let b = Math.max(0, startBeat); b <= Math.min(globalTotalBeats, endBeat); b++) {
-        const x = (b - beatPosition) * pixelsPerBeat + w / 2;
+    const stageGradient = ctx.createLinearGradient(0, 0, w, h);
+    stageGradient.addColorStop(0, 'rgba(34, 211, 238, 0.10)');
+    stageGradient.addColorStop(0.34, 'rgba(24, 24, 27, 0.72)');
+    stageGradient.addColorStop(1, 'rgba(3, 7, 18, 0.95)');
+    ctx.fillStyle = stageGradient;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = 'rgba(24, 24, 27, 0.88)';
+    ctx.fillRect(0, 0, gutterW, h);
+    ctx.fillStyle = 'rgba(9, 9, 11, 0.74)';
+    ctx.fillRect(gutterW, 0, w - gutterW, rulerH);
+    ctx.strokeStyle = 'rgba(63, 63, 70, 0.90)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(gutterW + 0.5, 0);
+    ctx.lineTo(gutterW + 0.5, h);
+    ctx.moveTo(0, rulerH + 0.5);
+    ctx.lineTo(w, rulerH + 0.5);
+    ctx.stroke();
+
+    for (let midi = 36; midi <= 96; midi++) {
+        const y = trackTop + (1 - (midi - 36) / (96 - 36)) * trackHeight;
+        const isOctave = midi % 12 === 0;
+        ctx.strokeStyle = isOctave ? 'rgba(34, 211, 238, 0.13)' : 'rgba(255, 255, 255, 0.035)';
+        ctx.lineWidth = isOctave ? 1 : 0.5;
         ctx.beginPath();
-        ctx.moveTo(x, 0);
+        ctx.moveTo(gutterW, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+
+        if (isOctave) {
+            const note = lookupByMidi(midi);
+            if (note) {
+                ctx.fillStyle = 'rgba(212, 212, 216, 0.68)';
+                ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(note.name, gutterW - 9, y);
+            }
+        }
+    }
+
+    const staffGap = 9;
+    const staffCenters = [trackTop + trackHeight * 0.32, trackTop + trackHeight * 0.68];
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.11)';
+    staffCenters.forEach((center, idx) => {
+        for (let i = -2; i <= 2; i++) {
+            const y = center + i * staffGap;
+            ctx.beginPath();
+            ctx.moveTo(gutterW, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(34, 211, 238, 0.35)';
+        ctx.font = 'bold 10px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(idx === 0 ? 'TREBLE' : 'BASS', gutterW + 10, center - 34);
+    });
+
+    const startBeat = Math.floor(beatPosition - visibleLeftBeats) - 1;
+    const endBeat = Math.ceil(beatPosition + visibleRightBeats) + 1;
+    for (let b = Math.max(0, startBeat); b <= Math.min(globalTotalBeats, endBeat); b++) {
+        const x = (b - beatPosition) * pixelsPerBeat + playheadX;
+        const isMeasure = b % 4 === 0;
+
+        if (isMeasure) {
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.045)';
+            ctx.fillRect(x, rulerH, pixelsPerBeat * 4, h - rulerH);
+        }
+
+        ctx.strokeStyle = isMeasure ? 'rgba(34, 211, 238, 0.30)' : 'rgba(255, 255, 255, 0.07)';
+        ctx.lineWidth = isMeasure ? 1.2 : 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, rulerH);
         ctx.lineTo(x, h);
         ctx.stroke();
 
-        // 小节号
-        if (b % 4 === 0) {
-            ctx.fillStyle = '#64748b';
-            ctx.font = '10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(`m.${b/4 + 1}`, x, 12);
-            ctx.fillStyle = '#475569';
-        }
+        ctx.fillStyle = isMeasure ? 'rgba(103, 232, 249, 0.90)' : 'rgba(161, 161, 170, 0.52)';
+        ctx.font = isMeasure ? 'bold 10px ui-monospace, SFMono-Regular, Menlo, monospace' : '9px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(isMeasure ? `M${Math.floor(b / 4) + 1}` : `${b + 1}`, x, rulerH / 2);
     }
-    ctx.globalAlpha = 1.0;
 
-    // 绘制音符
     currentSongInfo.data.forEach((item) => {
-        const noteX = (item.startTimeBeat - beatPosition) * pixelsPerBeat + w / 2;
-        if (noteX < -50 || noteX > w + 50) return;
+        const noteX = (item.startTimeBeat - beatPosition) * pixelsPerBeat + playheadX;
+        const noteW = Math.max(item.durationBeat * pixelsPerBeat - 12, 22);
+        if (noteX < gutterW - noteW - 60 || noteX > w + 60) return;
 
-        const yPercent = 1 - ((item.midi - 36) / (96 - 36));
-        const noteY = yPercent * (h - 20) + 10;
-        const noteW = item.durationBeat * pixelsPerBeat - 4;
-        const noteH = 14;
+        const noteY = trackTop + (1 - (item.midi - 36) / (96 - 36)) * trackHeight;
+        const noteH = 18;
+        const isWaiting = currentMode === 'wait' && !item.played && Math.abs(item.startTimeBeat - practiceCurrentBeat) < 0.01;
+        const isActive = beatPosition >= item.startTimeBeat - 0.001 && beatPosition <= item.startTimeBeat + item.durationBeat + 0.03 && !isWaiting;
+        const isPlayed = item.played && !isActive;
 
-        let color;
-        if (item.played) {
-            color = '#64748b'; // 已弹过的音符 → 灰色
-            ctx.globalAlpha = 0.5;
-        } else if (item.startTimeBeat <= beatPosition + 0.001) {
-            color = '#f43f5e'; // 正在播放 → 红色
-            ctx.globalAlpha = 1;
-        } else {
-            color = '#6366f1'; // 未弹 → 紫色
-            ctx.globalAlpha = 0.9;
+        let fill = '#22d3ee';
+        let edge = '#67e8f9';
+        let shadow = '#22d3ee';
+        let blur = 12;
+        let alpha = 0.82;
+
+        if (isWaiting) {
+            fill = '#fbbf24';
+            edge = '#fed7aa';
+            shadow = '#f59e0b';
+            blur = 24;
+            alpha = 1;
+        } else if (isActive) {
+            fill = '#67e8f9';
+            edge = '#ecfeff';
+            shadow = '#22d3ee';
+            blur = 26;
+            alpha = 1;
+        } else if (isPlayed) {
+            fill = '#52525b';
+            edge = '#71717a';
+            shadow = 'rgba(82, 82, 91, 0)';
+            blur = 0;
+            alpha = 0.42;
         }
 
-        // 检测是否需要高亮（练习模式等待的音符）
-        if (currentMode === 'wait' && !item.played &&
-            Math.abs(item.startTimeBeat - practiceCurrentBeat) < 0.01) {
-            color = '#eab308';
-            ctx.shadowColor = '#eab308';
-            ctx.shadowBlur = 15;
+        if (!isPlayed) {
+            const trail = ctx.createLinearGradient(noteX - 46, 0, noteX + noteW, 0);
+            trail.addColorStop(0, 'rgba(34, 211, 238, 0)');
+            trail.addColorStop(1, isWaiting ? 'rgba(245, 158, 11, 0.20)' : 'rgba(34, 211, 238, 0.18)');
+            ctx.fillStyle = trail;
+            ctx.fillRect(noteX - 46, noteY - noteH / 2 - 4, noteW + 46, noteH + 8);
         }
 
-        ctx.fillStyle = color;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 1;
+        ctx.shadowColor = shadow;
+        ctx.shadowBlur = blur;
         ctx.beginPath();
-        roundRect(ctx, noteX, noteY, Math.max(noteW, 4), noteH, 3);
+        drawCapsule(ctx, noteX, noteY - noteH / 2, noteW, noteH);
         ctx.fill();
+        ctx.stroke();
 
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
+        if (!isPlayed) {
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 0.58;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
+            ctx.beginPath();
+            drawCapsule(ctx, noteX + 4, noteY - noteH / 2 + 4, Math.max(noteW - 8, noteH), 4);
+            ctx.fill();
+        }
+        ctx.restore();
 
-        // 音符名称标签
-        if (noteW > 20) {
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 9px monospace';
+        if (noteW > 38) {
+            ctx.save();
+            ctx.fillStyle = isPlayed ? 'rgba(212, 212, 216, 0.48)' : '#082f49';
+            ctx.font = 'bold 9px ui-monospace, SFMono-Regular, Menlo, monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(item.note, noteX + Math.max(noteW, 4) / 2, noteY + noteH / 2);
+            ctx.fillText(item.note, noteX + noteW / 2, noteY + 0.5);
+            ctx.restore();
         }
     });
 
-    // 绘制播放头（红色竖线）
-    ctx.strokeStyle = '#f43f5e';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#f43f5e';
-    ctx.shadowBlur = 15;
+    const beam = ctx.createLinearGradient(playheadX - 16, 0, playheadX + 16, 0);
+    beam.addColorStop(0, 'rgba(34, 211, 238, 0)');
+    beam.addColorStop(0.5, 'rgba(34, 211, 238, 0.16)');
+    beam.addColorStop(1, 'rgba(34, 211, 238, 0)');
+    ctx.fillStyle = beam;
+    ctx.fillRect(playheadX - 16, rulerH, 32, h - rulerH);
+
+    const laserGradient = ctx.createLinearGradient(playheadX, 0, playheadX, h);
+    laserGradient.addColorStop(0, 'rgba(34, 211, 238, 0.10)');
+    laserGradient.addColorStop(0.5, 'rgba(34, 211, 238, 1)');
+    laserGradient.addColorStop(1, 'rgba(34, 211, 238, 0.10)');
+    ctx.strokeStyle = laserGradient;
+    ctx.lineWidth = 2.4;
+    ctx.shadowColor = '#22d3ee';
+    ctx.shadowBlur = 26;
     ctx.beginPath();
-    ctx.moveTo(w / 2, 0);
-    ctx.lineTo(w / 2, h);
+    ctx.moveTo(playheadX, rulerH);
+    ctx.lineTo(playheadX, h);
     ctx.stroke();
+
+    ctx.fillStyle = '#22d3ee';
+    ctx.beginPath();
+    ctx.arc(playheadX, h - 12, 4, 0, Math.PI * 2);
+    ctx.fill();
     ctx.shadowBlur = 0;
 
-    // 绘制顶部音高标记
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '9px sans-serif';
-    ctx.textAlign = 'right';
-    for (let midi = 36; midi <= 96; midi += 12) {
-        const note = lookupByMidi(midi);
-        if (note) {
-            const y = (1 - (midi - 36) / (96 - 36)) * (h - 20) + 10;
-            ctx.fillText(note.name, w - 5, y + 4);
-        }
-    }
+    ctx.restore();
 }
 
 /** Pointer Events 驱动的虚拟键盘渲染（修复鼠标滑动卡键问题） */
@@ -256,8 +351,8 @@ function renderKeyboard() {
 
         const keyDiv = document.createElement('div');
         keyDiv.id = `key-${noteInfo.midi}`;
-        keyDiv.className = 'key-white w-10 h-full mx-[1px] flex items-end justify-center pb-3 text-xs font-bold cursor-pointer shrink-0';
-        keyDiv.innerText = keyName;
+                keyDiv.className = 'key-white w-10 h-full mx-[1px] flex items-end justify-center pb-3 text-xs font-bold cursor-pointer shrink-0';
+        keyDiv.innerHTML = `<span class="key-label">${keyName}</span>`;
         keyDiv.style.width = `${whiteKeyWidth}px`;
         keyDiv.dataset.whiteIndex = idx;
 
@@ -290,13 +385,12 @@ function renderKeyboard() {
     blackKeyPositions.forEach(({ left, name, midi }) => {
         const keyDiv = document.createElement('div');
         keyDiv.id = `key-${midi}`;
-        keyDiv.className = 'absolute bg-gray-900 rounded-b-md border border-gray-700 border-t-0 flex items-end justify-center pb-4 text-[9px] font-bold text-gray-300 cursor-pointer z-10 shadow-lg';
+        keyDiv.className = 'key-black absolute flex items-end justify-center pb-4 text-[9px] font-bold cursor-pointer z-10';
         keyDiv.style.width = `${blackKeyWidth}px`;
         keyDiv.style.height = blackKeyHeight;
         keyDiv.style.left = `${left}px`;
-        keyDiv.style.top = '0';
-        keyDiv.style.background = 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)';
-        keyDiv.innerText = name.replace('#', '♯');
+                keyDiv.style.top = '0';
+        keyDiv.innerHTML = `<span class="key-label">${name.replace('#', '♯')}</span>`;
 
         keyDiv.addEventListener('pointerdown', (e) => { e.stopPropagation(); handleNoteOn(midi); });
         keyDiv.addEventListener('pointerup', (e) => { e.stopPropagation(); handleNoteOff(midi); });
@@ -313,6 +407,12 @@ function renderKeyboard() {
 
 // ==================== 播放控制 ====================
 
+function setPlayButtonAppearance(state) {
+    btnPlayPause.className = state === 'playing'
+        ? 'rounded-xl border border-cyan-300/50 bg-cyan-500/20 px-4 py-3 text-sm font-black text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.32)] transition-all hover:bg-cyan-400/25'
+        : 'rounded-xl border border-cyan-400/30 bg-zinc-900 px-4 py-3 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.14)] transition-all hover:border-cyan-300 hover:bg-cyan-400/10 hover:text-cyan-100';
+}
+
 function togglePlayPause() {
     if (!isPlaying && !isPaused) {
         startPractice();
@@ -321,16 +421,16 @@ function togglePlayPause() {
         isPlaying = false;
         isPaused = true;
         cancelAnimationFrame(animationId);
-        btnPlayPause.innerText = '继续';
-        btnPlayPause.classList.replace('bg-rose-600', 'bg-emerald-600');
+                btnPlayPause.innerText = '继续';
+        setPlayButtonAppearance('ready');
         instructionText.innerText = '已暂停';
     } else if (!isPlaying && isPaused) {
         // 继续
         isPlaying = true;
         isPaused = false;
-        btnPlayPause.innerText = '暂停';
-        btnPlayPause.classList.replace('bg-emerald-600', 'bg-rose-600');
-        instructionText.innerText = currentMode === 'auto' ? '自动播放中...' : '练习模式：请在琴键上弹奏到达红线的高亮音符！';
+                btnPlayPause.innerText = '暂停';
+        setPlayButtonAppearance('playing');
+        instructionText.innerText = currentMode === 'auto' ? '自动播放中...' : '练习模式：请弹奏到达青色激光线的琥珀色音符。';
         audioEngine.init();
 
         if (currentMode === 'auto') {
@@ -345,8 +445,8 @@ function togglePlayPause() {
 function startPractice() {
     isPlaying = true;
     isPaused = false;
-    btnPlayPause.innerText = '暂停';
-    btnPlayPause.classList.replace('bg-emerald-600', 'bg-rose-600');
+        btnPlayPause.innerText = '暂停';
+    setPlayButtonAppearance('playing');
     audioEngine.init();
 
     if (currentMode === 'auto') {
@@ -354,7 +454,7 @@ function startPractice() {
         playStartTime = performance.now() - (currentBeat * msPerBeat);
         requestAnimationFrame(playLoop);
     } else {
-        instructionText.innerText = '练习模式：请在琴键上弹奏到达红线的高亮音符！';
+        instructionText.innerText = '练习模式：请弹奏到达青色激光线的琥珀色音符。';
         const beatsSet = new Set();
         currentSongInfo.data.forEach(n => beatsSet.add(n.startTimeBeat));
         uniqueBeats = Array.from(beatsSet).sort((a, b) => a - b);
@@ -415,8 +515,8 @@ function finishPlaying() {
     isPaused = false;
     cancelAnimationFrame(animationId);
     instructionText.innerText = '太棒了！曲目播放完成。';
-    btnPlayPause.innerText = '重新播放';
-    btnPlayPause.classList.replace('bg-rose-600', 'bg-emerald-600');
+        btnPlayPause.innerText = '重新播放';
+    setPlayButtonAppearance('ready');
 }
 
 function resetPractice() {
@@ -432,9 +532,8 @@ function resetPractice() {
     // 重新绘制 Canvas
     drawSheet(0);
 
-    btnPlayPause.innerText = '播放';
-    btnPlayPause.classList.remove('bg-rose-600');
-    btnPlayPause.classList.add('bg-emerald-600');
+        btnPlayPause.innerText = '播放';
+    setPlayButtonAppearance('ready');
     instructionText.innerText = currentMode === 'wait' ? '练习模式就绪，点击播放。' : '自动播放引擎就绪。';
 }
 
@@ -561,7 +660,7 @@ function setMode(mode) {
         btnWait.classList.replace('text-slate-400', 'text-white');
         btnAuto.classList.replace('text-white', 'text-slate-400');
         modeSlider.style.transform = 'translateX(100%)';
-        instructionText.innerText = '已切换至练习模式：你需要弹对高亮的琴键，谱面才会前进。';
+        instructionText.innerText = '已切换至练习模式：你需要弹对琥珀色高亮琴键，谱面才会前进。';
     }
 }
 
@@ -630,30 +729,35 @@ async function updatePlaylistUI() {
         const playlistEl = document.getElementById('playlist-container');
         if (!playlistEl) return;
 
-        if (count === 0) {
-            playlistEl.innerHTML = '<div class="text-slate-500 text-sm p-4 text-center">暂无保存的曲谱，上传后自动保存。</div>';
+                if (count === 0) {
+            playlistEl.innerHTML = '<tr><td colspan="5" class="px-3 py-8 text-center text-zinc-500">暂无保存的曲谱，上传后自动保存。</td></tr>';
+            const countEl = document.getElementById('playlist-count');
+            if (countEl) countEl.textContent = '0 首';
             return;
         }
 
         const sheets = await getAllSheets();
-        let html = '<div class="space-y-1 max-h-40 overflow-y-auto no-scrollbar p-2">';
+        const countEl = document.getElementById('playlist-count');
+        if (countEl) countEl.textContent = `${sheets.length} 首`;
+
+        let html = '';
         sheets.forEach(sheet => {
-            const date = new Date(sheet.timestamp);
-            const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+            const ext = (sheet.fileName || sheet.name || '').split('.').pop()?.toUpperCase() || 'SHEET';
+            const statusText = currentSongNameUI.innerText.includes(sheet.name) ? 'Loaded' : 'Ready';
+            const statusColor = statusText === 'Loaded' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.7)]';
             html += `
-                <div class="flex items-center justify-between bg-slate-700/50 hover:bg-slate-700 rounded px-3 py-1.5 cursor-pointer group"
-                     onclick="window.loadSheetFromLibrary(${sheet.id})">
-                    <span class="text-sm text-slate-200 truncate">${sheet.name}</span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs text-slate-500">${dateStr}</span>
-                        <span class="text-xs text-indigo-400">${sheet.bpm}BPM</span>
-                        <span class="text-xs text-slate-500 opacity-0 group-hover:opacity-100 cursor-pointer hover:text-red-400"
-                              onclick="event.stopPropagation(); window.deleteSheetFromLibrary(${sheet.id})">✕</span>
-                    </div>
-                </div>
+                <tr class="group cursor-pointer transition-colors hover:bg-zinc-800/80" onclick="window.loadSheetFromLibrary(${sheet.id})">
+                    <td class="px-3 py-2 font-mono text-xs text-zinc-500">#${sheet.id}</td>
+                    <td class="max-w-[220px] truncate px-3 py-2 font-semibold text-zinc-200">${sheet.name}</td>
+                    <td class="px-3 py-2"><span class="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[10px] font-bold text-cyan-300">${ext}</span></td>
+                    <td class="px-3 py-2"><span class="inline-flex items-center gap-2 text-xs text-zinc-400"><span class="h-2 w-2 rounded-full ${statusColor}"></span>${statusText}</span></td>
+                    <td class="px-3 py-2 text-right">
+                        <button class="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs font-bold text-cyan-300 opacity-80 transition hover:border-cyan-400 hover:opacity-100" onclick="event.stopPropagation(); window.loadSheetFromLibrary(${sheet.id})">播放</button>
+                        <button class="ml-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs font-bold text-zinc-500 opacity-80 transition hover:border-red-400 hover:text-red-300 hover:opacity-100" onclick="event.stopPropagation(); window.deleteSheetFromLibrary(${sheet.id})">删除</button>
+                    </td>
+                </tr>
             `;
         });
-        html += '</div>';
         playlistEl.innerHTML = html;
     } catch (err) {
         console.warn('更新播放列表失败:', err);
@@ -762,6 +866,7 @@ audioEngine.onStatusChange((text) => {
 window.addEventListener('resize', () => {
     if (sheetCanvas) {
         sheetCanvas.width = sheetContainer.clientWidth || 1200;
+        sheetCanvas.height = sheetContainer.clientHeight || 320;
         drawSheet(currentBeat);
     }
 });
@@ -769,9 +874,10 @@ window.addEventListener('resize', () => {
 // ==================== 初始化 ====================
 
 export function init() {
-    renderSheet();
+        renderSheet();
     renderKeyboard();
     setMode(currentMode);
+    setPlayButtonAppearance('ready');
     bpmUI.value = bpm;
     midiController.init();
 
