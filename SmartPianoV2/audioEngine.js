@@ -10,6 +10,7 @@ export class AudioEngine {
         this.activeAudioNodes = {};
         this.masterGain = null;
         this.masterCompressor = null;
+        this.loadingPromise = null;
         this._onStatusChange = null;
     }
 
@@ -24,7 +25,7 @@ export class AudioEngine {
     }
 
     /** 初始化音频上下文与音色链路 */
-    init() {
+    async init() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -38,20 +39,27 @@ export class AudioEngine {
 
             // 2. 创建主控增益控制器
             this.masterGain = this.audioCtx.createGain();
-            const uiVolume = parseFloat(document.getElementById('volume-slider')?.value) || 1.2;
-            this.masterGain.gain.value = uiVolume;
+            const parsedVolume = parseFloat(document.getElementById('volume-slider')?.value);
+            this.masterGain.gain.value = Number.isFinite(parsedVolume) ? parsedVolume : 8;
 
             // 3. 硬件连线：音色库 -> 增益 -> 压限器 -> 扬声器
             this.masterGain.connect(this.masterCompressor);
             this.masterCompressor.connect(this.audioCtx.destination);
         }
         if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+            await this.audioCtx.resume();
         }
 
         if (!this.pianoInstrument) {
-            this._loadSoundfont();
+            if (!this.loadingPromise) {
+                this.loadingPromise = this._loadSoundfont().finally(() => {
+                    this.loadingPromise = null;
+                });
+            }
+            await this.loadingPromise;
         }
+
+        return this.pianoInstrument;
     }
 
     /** 加载 Soundfont 钢琴音色库 */
@@ -63,9 +71,11 @@ export class AudioEngine {
             });
             this.pianoInstrument = piano;
             this._updateStatus('🎹 钢琴音色加载完成！可以开始弹奏了。');
+            return piano;
         } catch (err) {
             console.error('音色加载失败', err);
             this._updateStatus('⚠️ 音色加载失败，请检查网络。');
+            return null;
         }
     }
 
@@ -118,7 +128,10 @@ export class AudioEngine {
     /** 设置主音量 (0-10) */
     setVolume(value) {
         if (this.masterGain) {
-            this.masterGain.gain.value = parseFloat(value);
+            const parsedVolume = parseFloat(value);
+            if (Number.isFinite(parsedVolume)) {
+                this.masterGain.gain.value = parsedVolume;
+            }
         }
     }
 

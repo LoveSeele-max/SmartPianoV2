@@ -110,7 +110,7 @@
         <span id="instruction-text">内置《小星星》示例曲谱。点击 📂 传曲谱 上传文件开始练习。</span>
     </div>
 
-    <main class="flex-1 relative overflow-y-auto bg-slate-900 p-6 no-scrollbar flex flex-col justify-start">
+    <main class="flex-1 min-h-0 relative overflow-y-auto bg-slate-900 p-4 md:p-6 no-scrollbar flex flex-col justify-start">
 
         <div class="max-w-6xl mx-auto w-full mb-2 flex flex-col md:flex-row items-center justify-between bg-slate-800 p-3 rounded-xl border border-slate-700 shadow-md gap-4 z-10 relative">
             <div class="flex items-center gap-3 shrink-0">
@@ -128,14 +128,14 @@
                 <span class="text-xs text-slate-400">BPM</span>
                 <input type="number" id="bpm-ui" class="font-mono font-bold text-indigo-400 text-lg w-14 text-center bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500 rounded" value="100" min="10" max="300" title="调整播放速度">
             </div>
-            <div class="flex items-center gap-2 shrink-0 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
+                        <div class="flex items-center gap-2 shrink-0 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
                 <span class="text-xs text-slate-400">音量</span>
-                <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="1.2" class="w-20">
+                <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="8" class="w-20">
             </div>
         </div>
 
         <!-- Canvas 卷帘窗 -->
-        <div id="sheet-container" class="relative w-full max-w-6xl mx-auto h-64 bg-slate-800/80 rounded-xl overflow-hidden border border-slate-700 shadow-inner mt-2"></div>
+        <div id="sheet-container" class="relative w-full max-w-6xl mx-auto h-[42vh] min-h-[320px] max-h-[560px] bg-slate-800/80 rounded-xl overflow-hidden border border-slate-700 shadow-inner mt-2"></div>
 
         <!-- 本地曲谱库 -->
         <div class="max-w-6xl mx-auto w-full mt-3 bg-slate-800/60 rounded-xl border border-slate-700/50 p-2">

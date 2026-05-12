@@ -51,6 +51,43 @@ let canvasCtx = null;
 let sheetCanvas = null;
 let animationFrameId = null;
 
+function resizeSheetCanvas() {
+    if (!sheetCanvas || !sheetContainer) return { width: 1200, height: 320 };
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssWidth = Math.max(sheetContainer.clientWidth || 1200, 320);
+    const cssHeight = Math.max(sheetContainer.clientHeight || 320, 220);
+
+    sheetCanvas.style.width = '100%';
+    sheetCanvas.style.height = '100%';
+
+    const targetWidth = Math.round(cssWidth * dpr);
+    const targetHeight = Math.round(cssHeight * dpr);
+    if (sheetCanvas.width !== targetWidth || sheetCanvas.height !== targetHeight) {
+        sheetCanvas.width = targetWidth;
+        sheetCanvas.height = targetHeight;
+    }
+
+    if (canvasCtx) canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { width: cssWidth, height: cssHeight };
+}
+
+function getVisiblePitchRange() {
+    const noteMidis = currentSongInfo.data
+        .map(item => item.midi)
+        .filter(midi => Number.isFinite(midi));
+
+    if (noteMidis.length === 0) return { min: 36, max: 96 };
+
+    const minMidi = Math.min(...noteMidis);
+    const maxMidi = Math.max(...noteMidis);
+
+    return {
+        min: Math.max(21, Math.min(36, minMidi - 4)),
+        max: Math.min(108, Math.max(96, maxMidi + 4))
+    };
+}
+
 // ==================== DOM 引用 ====================
 const sheetContainer = document.getElementById('sheet-container');
 const keyboardContainer = document.getElementById('virtual-keyboard');
@@ -84,27 +121,27 @@ function renderSheet() {
     currentSongInfo.data.forEach(item => {
         if (item.startTimeBeat === undefined) {
             item.startTimeBeat = tempBeat;
-            item.durationBeat = item.duration || 1;
-            tempBeat += item.durationBeat;
         }
+        item.durationBeat = item.durationBeat || item.duration || 1;
+        tempBeat = Math.max(tempBeat, item.startTimeBeat + item.durationBeat);
+
         const noteInfo = getNoteInfo(item.note);
         item.midi = item.midi || (noteInfo ? noteInfo.midi : 60);
     });
 
     // 计算总节拍长度
     globalTotalBeats = Math.max(...currentSongInfo.data.map(n => n.startTimeBeat + n.durationBeat), 10);
-    progressSlider.max = globalTotalBeats;
+        progressSlider.max = globalTotalBeats;
     progressSlider.value = currentBeat;
 
-        // 创建 Canvas 元素
+    // 创建 Canvas 元素
     sheetCanvas = document.createElement('canvas');
     sheetCanvas.id = 'sheet-canvas';
     sheetCanvas.className = 'h-full w-full rounded-2xl';
-    sheetCanvas.width = sheetContainer.clientWidth || 1200;
-    sheetCanvas.height = sheetContainer.clientHeight || 320;
     sheetContainer.appendChild(sheetCanvas);
 
     canvasCtx = sheetCanvas.getContext('2d');
+    resizeSheetCanvas();
     drawSheet(currentBeat);
 }
 
@@ -124,16 +161,17 @@ function drawSheet(beatPosition) {
     if (!canvasCtx || !sheetCanvas) return;
 
     const ctx = canvasCtx;
-    const w = sheetCanvas.width;
-    const h = sheetCanvas.height;
+    const { width: w, height: h } = resizeSheetCanvas();
+    const { min: pitchMin, max: pitchMax } = getVisiblePitchRange();
+    const pitchSpan = Math.max(1, pitchMax - pitchMin);
     const gutterW = 58;
     const rulerH = 34;
-    const bottomPad = 22;
+    const bottomPad = 26;
     const playheadX = gutterW + (w - gutterW) * 0.43;
-    const pixelsPerBeat = Math.max(88, Math.min(128, (w - gutterW) / 10));
+    const pixelsPerBeat = Math.max(64, Math.min(120, (w - gutterW) / 11));
     const visibleLeftBeats = (playheadX - gutterW) / pixelsPerBeat;
     const visibleRightBeats = (w - playheadX) / pixelsPerBeat;
-    const trackTop = rulerH + 8;
+    const trackTop = rulerH + 12;
     const trackBottom = h - bottomPad;
     const trackHeight = Math.max(120, trackBottom - trackTop);
 
@@ -161,8 +199,8 @@ function drawSheet(beatPosition) {
     ctx.lineTo(w, rulerH + 0.5);
     ctx.stroke();
 
-    for (let midi = 36; midi <= 96; midi++) {
-        const y = trackTop + (1 - (midi - 36) / (96 - 36)) * trackHeight;
+        for (let midi = pitchMin; midi <= pitchMax; midi++) {
+        const y = trackTop + (1 - (midi - pitchMin) / pitchSpan) * trackHeight;
         const isOctave = midi % 12 === 0;
         ctx.strokeStyle = isOctave ? 'rgba(34, 211, 238, 0.13)' : 'rgba(255, 255, 255, 0.035)';
         ctx.lineWidth = isOctave ? 1 : 0.5;
@@ -231,8 +269,11 @@ function drawSheet(beatPosition) {
         const noteW = Math.max(item.durationBeat * pixelsPerBeat - 12, 22);
         if (noteX < gutterW - noteW - 60 || noteX > w + 60) return;
 
-        const noteY = trackTop + (1 - (item.midi - 36) / (96 - 36)) * trackHeight;
         const noteH = 18;
+        const noteY = Math.max(
+            trackTop + noteH / 2,
+            Math.min(trackBottom - noteH / 2, trackTop + (1 - (item.midi - pitchMin) / pitchSpan) * trackHeight)
+        );
         const isWaiting = currentMode === 'wait' && !item.played && Math.abs(item.startTimeBeat - practiceCurrentBeat) < 0.01;
         const isActive = beatPosition >= item.startTimeBeat - 0.001 && beatPosition <= item.startTimeBeat + item.durationBeat + 0.03 && !isWaiting;
         const isPlayed = item.played && !isActive;
@@ -413,25 +454,27 @@ function setPlayButtonAppearance(state) {
         : 'rounded-xl border border-cyan-400/30 bg-zinc-900 px-4 py-3 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.14)] transition-all hover:border-cyan-300 hover:bg-cyan-400/10 hover:text-cyan-100';
 }
 
-function togglePlayPause() {
+async function togglePlayPause() {
     if (!isPlaying && !isPaused) {
-        startPractice();
+        await startPractice();
     } else if (isPlaying && !isPaused) {
         // 暂停
         isPlaying = false;
         isPaused = true;
-        cancelAnimationFrame(animationId);
-                btnPlayPause.innerText = '继续';
+                cancelAnimationFrame(animationId);
+        btnPlayPause.innerText = '继续';
         setPlayButtonAppearance('ready');
         instructionText.innerText = '已暂停';
     } else if (!isPlaying && isPaused) {
-        // 继续
+                // 继续
         isPlaying = true;
         isPaused = false;
-                btnPlayPause.innerText = '暂停';
+        btnPlayPause.innerText = '暂停';
         setPlayButtonAppearance('playing');
         instructionText.innerText = currentMode === 'auto' ? '自动播放中...' : '练习模式：请弹奏到达青色激光线的琥珀色音符。';
-        audioEngine.init();
+        await audioEngine.init();
+
+        if (!isPlaying || isPaused) return;
 
         if (currentMode === 'auto') {
             playStartTime = performance.now() - (currentBeat * msPerBeat);
@@ -442,12 +485,14 @@ function togglePlayPause() {
     }
 }
 
-function startPractice() {
+async function startPractice() {
     isPlaying = true;
     isPaused = false;
-        btnPlayPause.innerText = '暂停';
+    btnPlayPause.innerText = '暂停';
     setPlayButtonAppearance('playing');
-    audioEngine.init();
+    await audioEngine.init();
+
+    if (!isPlaying || isPaused) return;
 
     if (currentMode === 'auto') {
         instructionText.innerText = '自动播放中...';
@@ -488,17 +533,17 @@ function playLoop() {
         if (!note.played) {
             allPlayed = false;
             if (currentBeat >= note.startTimeBeat) {
-                note.played = true;
+                                note.played = true;
 
-                const playedNode = handleNoteOn(note.midi);
+                handleNoteOn(note.midi).then((playedNode) => {
+                    const gapMs = 40;
+                    const durationMs = note.durationBeat * msPerBeat;
+                    const offTime = durationMs > gapMs + 10 ? durationMs - gapMs : durationMs * 0.8;
 
-                const gapMs = 40;
-                const durationMs = note.durationBeat * msPerBeat;
-                const offTime = durationMs > gapMs + 10 ? durationMs - gapMs : durationMs * 0.8;
-
-                setTimeout(() => {
-                    handleNoteOff(note.midi, playedNode);
-                }, offTime);
+                    setTimeout(() => {
+                        handleNoteOff(note.midi, playedNode);
+                    }, offTime);
+                });
             }
         }
     });
@@ -513,9 +558,9 @@ function playLoop() {
 function finishPlaying() {
     isPlaying = false;
     isPaused = false;
-    cancelAnimationFrame(animationId);
+        cancelAnimationFrame(animationId);
     instructionText.innerText = '太棒了！曲目播放完成。';
-        btnPlayPause.innerText = '重新播放';
+    btnPlayPause.innerText = '重新播放';
     setPlayButtonAppearance('ready');
 }
 
@@ -529,10 +574,10 @@ function resetPractice() {
 
     currentSongInfo.data.forEach(note => note.played = false);
 
-    // 重新绘制 Canvas
+        // 重新绘制 Canvas
     drawSheet(0);
 
-        btnPlayPause.innerText = '播放';
+    btnPlayPause.innerText = '播放';
     setPlayButtonAppearance('ready');
     instructionText.innerText = currentMode === 'wait' ? '练习模式就绪，点击播放。' : '自动播放引擎就绪。';
 }
@@ -623,8 +668,8 @@ function checkPracticeNote(midiNumber) {
 
 // ==================== 音符事件处理 ====================
 
-function handleNoteOn(midiNumber) {
-    if (!audioEngine.getContext()) audioEngine.init();
+async function handleNoteOn(midiNumber) {
+    if (!audioEngine.getContext()) await audioEngine.init();
 
     const keyElement = document.getElementById(`key-${midiNumber}`);
     if (keyElement) {
@@ -705,15 +750,15 @@ function applyParsedSong(songData, fileName) {
         msPerBeat = (60 / bpm) * 1000;
         bpmUI.value = bpm;
 
-        // 自动保存到本地库
+                // 自动保存到本地库
         saveToLibrary(songData, fileName).then(() => {
             updatePlaylistUI();
         }).catch(err => {
             console.warn('保存到本地库失败:', err);
         });
 
-        resetPractice();
         renderSheet();
+        resetPractice();
         uploadInput.value = '';
         instructionText.innerText = `✅ 解析完成！共 ${songData.data.length} 个音符，BPM为 ${bpm}。`;
     }, 500);
@@ -865,8 +910,7 @@ audioEngine.onStatusChange((text) => {
 // 窗口大小变化时重绘 Canvas
 window.addEventListener('resize', () => {
     if (sheetCanvas) {
-        sheetCanvas.width = sheetContainer.clientWidth || 1200;
-        sheetCanvas.height = sheetContainer.clientHeight || 320;
+        resizeSheetCanvas();
         drawSheet(currentBeat);
     }
 });
@@ -874,11 +918,13 @@ window.addEventListener('resize', () => {
 // ==================== 初始化 ====================
 
 export function init() {
-        renderSheet();
+    renderSheet();
     renderKeyboard();
     setMode(currentMode);
     setPlayButtonAppearance('ready');
     bpmUI.value = bpm;
+    const volumeSlider = document.getElementById('volume-slider');
+    if (volumeSlider) volumeSlider.value = 8;
     midiController.init();
 
     // 初始化播放列表

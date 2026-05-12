@@ -118,7 +118,7 @@
 </head>
 <body class="h-screen flex flex-col overflow-hidden select-none">
 
-            <header class="z-20 border-b border-zinc-800/90 bg-zinc-900/95 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
+    <header class="z-20 shrink-0 border-b border-zinc-800/90 bg-zinc-900/95 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.35)] lg:p-3">
         <div class="mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-3 lg:grid-cols-12">
             <section class="glass-panel rounded-2xl p-3 lg:col-span-3">
                 <div class="mb-3 flex items-center justify-between gap-3">
@@ -148,15 +148,15 @@
                         <span class="mb-1 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">BPM</span>
                         <input type="number" id="bpm-ui" class="control-shell w-full bg-zinc-900 px-3 py-2 text-center font-mono text-lg font-black text-cyan-300" value="100" min="10" max="300" title="调整播放速度">
                     </label>
-                    <label class="rounded-xl border border-zinc-700 bg-zinc-950/60 p-3">
+                                        <label class="rounded-xl border border-zinc-700 bg-zinc-950/60 p-3">
                         <span class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">音量</span>
-                        <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="1.2" class="w-full">
+                        <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="8" class="w-full">
                     </label>
                 </div>
             </section>
 
                         <section class="glass-panel flex flex-col gap-3 rounded-2xl p-3 lg:col-span-2">
-                <label class="flex min-h-[128px] flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-600 bg-zinc-800/80 p-3 text-center text-zinc-400 transition-all hover:border-cyan-400 hover:bg-zinc-700/80 hover:text-cyan-300 hover:shadow-[0_0_24px_rgba(34,211,238,0.18)]" title="支持 MusicXML(.xml/.mxl)、MIDI(.mid/.midi)、JSON 曲谱文件">
+                <label class="flex min-h-[112px] flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-600 bg-zinc-800/80 p-3 text-center text-zinc-400 transition-all hover:border-cyan-400 hover:bg-zinc-700/80 hover:text-cyan-300 hover:shadow-[0_0_24px_rgba(34,211,238,0.18)]" title="支持 MusicXML(.xml/.mxl)、MIDI(.mid/.midi)、JSON 曲谱文件">
                     <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-600 bg-zinc-950 text-2xl text-cyan-300 shadow-inner">+</span>
                     <span class="text-base font-black">传曲谱</span>
                     <span class="mt-1 text-xs text-zinc-500">XML / MXL / MIDI / JSON</span>
@@ -176,7 +176,7 @@
                     </div>
                     <span id="playlist-count" class="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-400">加载中</span>
                 </div>
-                                <div class="max-h-[164px] overflow-auto rounded-xl border border-zinc-700 bg-zinc-950/45 no-scrollbar">
+                <div class="max-h-[138px] overflow-auto rounded-xl border border-zinc-700 bg-zinc-950/45 no-scrollbar">
                     <table class="w-full text-left text-xs">
                         <thead class="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-900/95 text-[10px] uppercase tracking-[0.18em] text-zinc-500 backdrop-blur">
                             <tr>
@@ -196,9 +196,9 @@
         </div>
     </header>
 
-        <main class="flex-1 min-h-0 bg-zinc-900 p-4">
+    <main class="flex-1 min-h-0 overflow-hidden bg-zinc-900 p-2 lg:p-4">
         <section class="glass-panel mx-auto flex h-full max-w-[1600px] flex-col overflow-hidden rounded-3xl">
-            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/55 px-4 py-3">
+            <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/55 px-4 py-2 lg:py-3">
                 <div class="min-w-0">
                     <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">Score View / Piano Roll</p>
                     <div class="mt-1 truncate text-sm text-zinc-400">
@@ -214,13 +214,13 @@
                 </div>
             </div>
 
-            <div class="relative flex-1 min-h-0 p-4">
-                <div id="sheet-container" class="relative h-full min-h-[360px] w-full overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950 shadow-[inset_0_0_70px_rgba(0,0,0,0.58),0_0_34px_rgba(34,211,238,0.08)]"></div>
+                        <div class="relative flex-1 min-h-0 p-2 lg:p-4">
+                <div id="sheet-container" class="relative h-full min-h-0 w-full overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950 shadow-[inset_0_0_70px_rgba(0,0,0,0.58),0_0_34px_rgba(34,211,238,0.08)]"></div>
             </div>
         </section>
     </main>
 
-    <footer class="h-40 border-t-4 border-zinc-950 bg-zinc-800 p-2 overflow-x-auto shadow-[0_-16px_34px_rgba(0,0,0,0.42)]">
+    <footer class="h-32 shrink-0 border-t-4 border-zinc-950 bg-zinc-800 p-2 overflow-x-auto shadow-[0_-16px_34px_rgba(0,0,0,0.42)] lg:h-36">
         <div class="flex h-full min-w-max mx-auto justify-center relative" id="virtual-keyboard"></div>
     </footer>
 
