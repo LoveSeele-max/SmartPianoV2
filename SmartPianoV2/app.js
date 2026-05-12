@@ -449,9 +449,15 @@ function renderKeyboard() {
 // ==================== 播放控制 ====================
 
 function setPlayButtonAppearance(state) {
-    btnPlayPause.className = state === 'playing'
-        ? 'rounded-xl border border-cyan-300/50 bg-cyan-500/20 px-4 py-3 text-sm font-black text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.32)] transition-all hover:bg-cyan-400/25'
-        : 'rounded-xl border border-cyan-400/30 bg-zinc-900 px-4 py-3 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.14)] transition-all hover:border-cyan-300 hover:bg-cyan-400/10 hover:text-cyan-100';
+    if (state === 'playing') {
+        btnPlayPause.style.background = '#0891b2';
+        btnPlayPause.setAttribute('onmouseover', "this.style.background='#0e7490'");
+        btnPlayPause.setAttribute('onmouseout', "this.style.background='#0891b2'");
+    } else {
+        btnPlayPause.style.background = '#22c55e';
+        btnPlayPause.setAttribute('onmouseover', "this.style.background='#16a34a'");
+        btnPlayPause.setAttribute('onmouseout', "this.style.background='#22c55e'");
+    }
 }
 
 async function togglePlayPause() {
@@ -785,20 +791,23 @@ async function updatePlaylistUI() {
         const countEl = document.getElementById('playlist-count');
         if (countEl) countEl.textContent = `${sheets.length} 首`;
 
-        let html = '';
+                let html = '';
         sheets.forEach(sheet => {
             const ext = (sheet.fileName || sheet.name || '').split('.').pop()?.toUpperCase() || 'SHEET';
-            const statusText = currentSongNameUI.innerText.includes(sheet.name) ? 'Loaded' : 'Ready';
-            const statusColor = statusText === 'Loaded' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]' : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.7)]';
+            const isLoaded = currentSongNameUI.innerText.includes(sheet.name);
+            const statusClass = isLoaded ? 's-playing' : 's-ready';
+            const statusText = isLoaded ? 'Playing' : 'Ready';
             html += `
-                <tr class="group cursor-pointer transition-colors hover:bg-zinc-800/80" onclick="window.loadSheetFromLibrary(${sheet.id})">
-                    <td class="px-3 py-2 font-mono text-xs text-zinc-500">#${sheet.id}</td>
-                    <td class="max-w-[220px] truncate px-3 py-2 font-semibold text-zinc-200">${sheet.name}</td>
-                    <td class="px-3 py-2"><span class="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[10px] font-bold text-cyan-300">${ext}</span></td>
-                    <td class="px-3 py-2"><span class="inline-flex items-center gap-2 text-xs text-zinc-400"><span class="h-2 w-2 rounded-full ${statusColor}"></span>${statusText}</span></td>
-                    <td class="px-3 py-2 text-right">
-                        <button class="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs font-bold text-cyan-300 opacity-80 transition hover:border-cyan-400 hover:opacity-100" onclick="event.stopPropagation(); window.loadSheetFromLibrary(${sheet.id})">播放</button>
-                        <button class="ml-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs font-bold text-zinc-500 opacity-80 transition hover:border-red-400 hover:text-red-300 hover:opacity-100" onclick="event.stopPropagation(); window.deleteSheetFromLibrary(${sheet.id})">删除</button>
+                <tr onclick="window.loadSheetFromLibrary(${sheet.id})">
+                    <td>${sheet.id}</td>
+                    <td class="title-cell">${sheet.name}</td>
+                    <td>${ext}</td>
+                    <td><span class="${statusClass}">${statusText}</span></td>
+                    <td style="text-align:right;">
+                        <button class="act-btn" title="播放" onclick="event.stopPropagation(); window.loadSheetFromLibrary(${sheet.id})">▶</button>
+                        <button class="act-btn" title="停止" onclick="event.stopPropagation();">■</button>
+                        <button class="act-btn" title="编辑" onclick="event.stopPropagation();">✎</button>
+                        <button class="act-btn del" title="删除" onclick="event.stopPropagation(); window.deleteSheetFromLibrary(${sheet.id})">🗑</button>
                     </td>
                 </tr>
             `;

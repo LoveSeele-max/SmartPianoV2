@@ -8,99 +8,191 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
     <script type="module" src="app.js"></script>
-    <style>
-        :root {
-            --app-bg: #18181b;
-            --panel-bg: #27272a;
-            --panel-border: #3f3f46;
-            --accent: #22d3ee;
-            --accent-dark: #06b6d4;
-        }
-
+        <style>
         * { box-sizing: border-box; }
+
         body {
-            background: radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 34%), var(--app-bg);
+            background: #111113;
             color: #e4e4e7;
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        .glass-panel {
-            background: linear-gradient(180deg, rgba(39, 39, 42, 0.96), rgba(24, 24, 27, 0.94));
-            border: 1px solid var(--panel-border);
-            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        /* ── Header panel card ── */
+        .hdr-card {
+            background: #1c1c1f;
+            border: 1px solid #2e2e32;
+            border-radius: 0.6rem;
         }
 
-        .control-shell {
-            background: #18181b;
+        /* ── Form controls ── */
+        .ctrl-label {
+            display: block;
+            font-size: 0.62rem;
+            font-weight: 600;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: #71717a;
+            margin-bottom: 0.3rem;
+        }
+        .ctrl-select {
+            appearance: none;
+            background: #09090b;
             border: 1px solid #3f3f46;
-            border-radius: 0.75rem;
+            border-radius: 0.35rem;
             color: #d4d4d8;
-            transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-        }
-        .control-shell:focus, .control-shell:focus-visible, input:focus, select:focus {
-            outline: none;
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.22), 0 0 18px rgba(34, 211, 238, 0.14);
-        }
-
-        .midi-status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }
-        .midi-connected { background-color: #4ade80; box-shadow: 0 0 12px #4ade80; }
-        .midi-disconnected { background-color: #52525b; box-shadow: 0 0 0 transparent; }
-
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .parse-progress { transition: width 0.3s ease; }
-
-        input[type=range] { accent-color: var(--accent); }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: var(--accent);
+            font-size: 0.78rem;
+            padding: 0.32rem 1.6rem 0.32rem 0.55rem;
+            width: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2371717a' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.45rem center;
             cursor: pointer;
-            margin-top: -4px;
-            box-shadow: 0 0 14px rgba(34, 211, 238, 0.8);
+            transition: border-color 0.15s;
         }
-        input[type=range]::-webkit-slider-runnable-track {
-            height: 8px;
+        .ctrl-select:focus { outline: none; border-color: #22d3ee; }
+
+        .ctrl-number {
+            background: #09090b;
+            border: 1px solid #3f3f46;
+            border-radius: 0.35rem;
+            color: #22d3ee;
+            font-size: 0.82rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-weight: 700;
+            padding: 0.32rem 0.4rem;
+            width: 100%;
+            text-align: center;
+            transition: border-color 0.15s;
+        }
+        .ctrl-number:focus { outline: none; border-color: #22d3ee; }
+
+        /* ── Toggle switch ── */
+        .tog-track {
+            width: 34px; height: 18px;
             background: #3f3f46;
             border-radius: 999px;
-        }
-
-        #sheet-canvas {
+            position: relative;
             cursor: pointer;
-            touch-action: none;
+            transition: background 0.2s;
+            flex-shrink: 0;
         }
+        .tog-track.on { background: #22d3ee; }
+        .tog-thumb {
+            position: absolute;
+            top: 2px; left: 2px;
+            width: 14px; height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        .tog-track.on .tog-thumb { transform: translateX(16px); }
 
+        /* ── MIDI dot ── */
+        .midi-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+        .midi-connected    { background: #4ade80; box-shadow: 0 0 7px #4ade80; }
+        .midi-disconnected { background: #52525b; }
+
+        /* ── Add Sheet button ── */
+        .add-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            background: #09090b;
+            border: 1.5px dashed #3f3f46;
+            border-radius: 0.5rem;
+            color: #71717a;
+            cursor: pointer;
+            font-size: 0.65rem;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: center;
+            padding: 0.5rem 0.75rem;
+            transition: border-color 0.15s, color 0.15s, background 0.15s;
+            white-space: nowrap;
+            min-width: 82px;
+        }
+        .add-btn:hover { border-color: #22d3ee; color: #22d3ee; background: rgba(34,211,238,0.05); }
+        .add-btn .plus { font-size: 1.5rem; line-height: 1; color: #52525b; transition: color 0.15s; }
+        .add-btn:hover .plus { color: #22d3ee; }
+
+        /* ── Sheet table ── */
+        .sh-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+        .sh-table thead th {
+            padding: 0.35rem 0.55rem;
+            text-align: left;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: #71717a;
+            border-bottom: 1px solid #2e2e32;
+            white-space: nowrap;
+            background: #161618;
+        }
+        .sh-table tbody tr { border-bottom: 1px solid #222224; transition: background 0.1s; cursor: pointer; }
+        .sh-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+        .sh-table tbody td { padding: 0.4rem 0.55rem; color: #a1a1aa; white-space: nowrap; }
+        .sh-table tbody td.title-cell { color: #e4e4e7; font-weight: 500; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+
+        .s-ready    { color: #4ade80; font-weight: 700; font-size: 0.65rem; }
+        .s-playing  { color: #22d3ee; font-weight: 700; font-size: 0.65rem; }
+        .s-learning { color: #fb923c; font-weight: 700; font-size: 0.65rem; }
+
+        .act-btn {
+            background: none; border: none;
+            color: #52525b; cursor: pointer;
+            padding: 0.1rem 0.2rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            transition: color 0.12s;
+            line-height: 1;
+        }
+        .act-btn:hover { color: #d4d4d8; }
+        .act-btn.del:hover { color: #f87171; }
+
+        /* ── Scrollbar hide ── */
+        .no-sb::-webkit-scrollbar { display: none; }
+        .no-sb { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ── Parse modal ── */
+        .parse-progress { transition: width 0.3s ease; }
+
+        /* ── Sheet canvas ── */
+        #sheet-canvas { cursor: pointer; touch-action: none; }
+
+        /* ── Piano keys ── */
         .key-white {
-            background: linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%);
-            color: #64748b;
-            border: 1px solid #94a3b8;
+            background: linear-gradient(180deg, #f0ede4 0%, #ccc5ae 100%);
+            color: #6b6b5a;
+            border: 1px solid #9e9880;
             border-top: none;
-            border-radius: 0 0 7px 7px;
-            box-shadow: inset 0 -8px 16px rgba(15, 23, 42, 0.12), 0 6px 10px rgba(0, 0, 0, 0.24);
-            transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+            border-radius: 0 0 5px 5px;
+            box-shadow: inset 0 -5px 10px rgba(0,0,0,0.10), 0 3px 7px rgba(0,0,0,0.32);
+            transition: transform 0.07s ease, background 0.07s ease;
             touch-action: none;
         }
         .key-black {
-            background: linear-gradient(180deg, #27272a 0%, #020617 100%);
+            background: linear-gradient(180deg, #1a1a1c 0%, #000 100%);
             color: #a1a1aa;
             border: 1px solid #000;
             border-top: none;
-            border-radius: 0 0 6px 6px;
-            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5), inset 0 -8px 14px rgba(0, 0, 0, 0.48);
-            transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+            border-radius: 0 0 4px 4px;
+            box-shadow: 2px 3px 5px rgba(0,0,0,0.65), inset 0 -5px 9px rgba(0,0,0,0.5);
+            transition: transform 0.07s ease, background 0.07s ease;
             touch-action: none;
         }
         .key-label {
             font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-            letter-spacing: 0.02em;
-            opacity: 0.68;
+            font-size: 0.5rem;
+            letter-spacing: 0.01em;
+            opacity: 0.72;
         }
         .key-pressed.key-white {
             background: #a5f3fc !important;
-            box-shadow: 0 0 20px #22d3ee, inset 0 0 10px #06b6d4 !important;
+            box-shadow: 0 0 16px #22d3ee, inset 0 0 8px #06b6d4 !important;
             border-color: #06b6d4 !important;
             color: #164e63 !important;
             transform: translateY(2px);
@@ -108,140 +200,204 @@
         }
         .key-pressed.key-black {
             background: linear-gradient(180deg, #0891b2 0%, #083344 100%) !important;
-            box-shadow: 0 0 20px #22d3ee, inset 0 0 12px #67e8f9, 2px 2px 5px rgba(0, 0, 0, 0.55) !important;
+            box-shadow: 0 0 16px #22d3ee, inset 0 0 9px #67e8f9 !important;
             border-color: #22d3ee !important;
             color: #ecfeff !important;
-            transform: translateY(2px) scale(0.98);
+            transform: translateY(2px) scale(0.97);
             transition: none !important;
         }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden select-none">
 
-    <header class="z-20 shrink-0 border-b border-zinc-800/90 bg-zinc-900/95 p-2 shadow-[0_16px_40px_rgba(0,0,0,0.35)] lg:p-3">
-        <div class="mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-3 lg:grid-cols-12">
-            <section class="glass-panel rounded-2xl p-3 lg:col-span-3">
-                <div class="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                        <p class="text-[11px] uppercase tracking-[0.28em] text-cyan-400">Smart Piano V2</p>
-                        <h1 class="mt-1 text-lg font-black tracking-tight text-zinc-50">现代钢琴练习工作站</h1>
-                    </div>
-                    <div class="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.12)]">88</div>
+    <!-- ══════════════════════════════════════════
+         HEADER
+    ══════════════════════════════════════════ -->
+    <header class="shrink-0 px-4 pt-2 pb-2" style="background:#111113; border-bottom:1px solid #222224;">
+
+        <!-- Title row -->
+        <div class="flex items-center mb-2" style="position:relative;">
+            <div style="flex:1;"></div>
+            <h1 class="text-sm font-black tracking-tight text-zinc-100" style="position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;">
+                Smart Piano V2 (Yamaha PSR-E383)
+            </h1>
+            <div style="flex:1; text-align:right; font-size:0.7rem; color:#71717a;">
+                Device Status:&nbsp;<span id="midi-status-text" style="color:#22d3ee; font-weight:600;">初始化中...</span>
+            </div>
+        </div>
+
+        <!-- Controls row -->
+        <div class="flex gap-2 items-stretch" style="min-height:80px;">
+
+            <!-- ── Device & Mode card ── -->
+            <div class="hdr-card px-3 py-2 flex gap-4 items-start shrink-0">
+
+                <!-- Section title -->
+                <div style="position:absolute; margin-top:-0.1rem;">
+                    <!-- spacer -->
                 </div>
 
-                <div class="grid grid-cols-2 gap-2">
-                    <div class="col-span-2 rounded-xl border border-zinc-700 bg-zinc-950/60 p-3">
-                        <label class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">MIDI Device</label>
-                        <div class="flex items-center gap-2 text-sm text-zinc-300">
-                            <span id="midi-dot" class="midi-status-dot midi-disconnected shrink-0"></span>
-                            <span id="midi-status-text" class="truncate">初始化中...</span>
+                <!-- Column: section label + MIDI Input -->
+                <div class="flex flex-col justify-between h-full" style="min-width:130px;">
+                    <div class="ctrl-label" style="color:#a1a1aa; font-size:0.65rem; margin-bottom:0.5rem;">Device &amp; Mode</div>
+                    <div>
+                        <span class="ctrl-label">MIDI Input</span>
+                        <div class="flex items-center gap-1.5">
+                            <span id="midi-dot" class="midi-status-dot midi-disconnected"></span>
+                            <select class="ctrl-select" style="min-width:120px;">
+                                <option>Yamaha PSR-E383</option>
+                            </select>
                         </div>
                     </div>
+                </div>
 
-                    <div class="col-span-2 flex bg-zinc-950 rounded-xl p-1 relative border border-zinc-700">
-                        <button id="mode-auto" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 z-10 w-1/2 text-white">自动播放</button>
-                        <button id="mode-wait" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 z-10 w-1/2 text-slate-400">练习模式</button>
-                        <div id="mode-slider" class="absolute top-1 left-1 w-[calc(50%-4px)] h-[calc(100%-8px)] bg-cyan-600 rounded-lg shadow-[0_0_18px_rgba(34,211,238,0.45)] transition-all duration-300"></div>
+                <!-- Column: Mode Select -->
+                <div class="flex flex-col justify-end h-full" style="min-width:110px;">
+                    <span class="ctrl-label">Mode Select</span>
+                    <select id="mode-select-native" class="ctrl-select">
+                        <option value="auto">Play</option>
+                        <option value="wait">Practice</option>
+                        <option value="metro">Metronome</option>
+                    </select>
+                    <!-- app.js compat -->
+                    <button id="mode-auto" class="hidden"></button>
+                    <button id="mode-wait" class="hidden"></button>
+                    <div id="mode-slider" class="hidden"></div>
+                </div>
+
+                <!-- Column: BPM -->
+                <div class="flex flex-col justify-end h-full" style="min-width:80px;">
+                    <span class="ctrl-label">Beat Control (BPM)</span>
+                    <input type="number" id="bpm-ui" class="ctrl-number" value="100" min="10" max="300">
+                </div>
+
+                <!-- Column: Metronome toggle -->
+                <div class="flex flex-col justify-end h-full">
+                    <span class="ctrl-label">Metronome</span>
+                    <div class="flex items-center" style="height:28px;">
+                        <div class="tog-track" id="metronome-toggle"
+                             onclick="this.classList.toggle('on')">
+                            <div class="tog-thumb"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column: Play / Reset -->
+                <div class="flex flex-col justify-end h-full gap-1.5">
+                    <button id="btn-play-pause"
+                        style="background:#22c55e; border:none; border-radius:0.35rem; color:#fff; font-size:0.72rem; font-weight:700; padding:0.3rem 1rem; cursor:pointer; min-width:64px; transition:background 0.15s;"
+                        onmouseover="this.style.background='#16a34a'" onmouseout="this.style.background='#22c55e'">
+                        播放
+                    </button>
+                    <button id="btn-reset"
+                        style="background:#27272a; border:1px solid #3f3f46; border-radius:0.35rem; color:#d4d4d8; font-size:0.72rem; font-weight:700; padding:0.3rem 1rem; cursor:pointer; min-width:64px; transition:background 0.15s;"
+                        onmouseover="this.style.background='#3f3f46'" onmouseout="this.style.background='#27272a'">
+                        重置
+                    </button>
+                </div>
+
+            </div><!-- end Device & Mode card -->
+
+            <!-- ── Sheet Library & Actions card ── -->
+            <div class="hdr-card px-3 py-2 flex flex-col" style="flex:1; min-width:0;">
+                <div class="ctrl-label" style="color:#a1a1aa; font-size:0.65rem; margin-bottom:0.4rem;">Sheet Library &amp; Actions</div>
+
+                <div class="flex gap-2" style="flex:1; min-height:0;">
+
+                    <!-- Add Sheet button -->
+                    <label class="add-btn">
+                        <span class="plus">+</span>
+                        <span>Add Sheet /<br>Import MIDI</span>
+                        <input type="file" id="upload-sheet" class="hidden" accept=".xml,.mxl,.mid,.midi,.json">
+                    </label>
+
+                    <!-- Table -->
+                    <div class="no-sb" style="flex:1; overflow:auto; border:1px solid #2a2a2e; border-radius:0.4rem;">
+                        <table class="sh-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:32px;">ID</th>
+                                    <th>Title</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="playlist-container">
+                                <tr>
+                                    <td colspan="5" style="text-align:center; padding:1rem; color:#52525b; font-size:0.7rem;">
+                                        暂无曲谱，点击左侧按钮上传。
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
-                    <label class="rounded-xl border border-zinc-700 bg-zinc-950/60 p-3">
-                        <span class="mb-1 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">BPM</span>
-                        <input type="number" id="bpm-ui" class="control-shell w-full bg-zinc-900 px-3 py-2 text-center font-mono text-lg font-black text-cyan-300" value="100" min="10" max="300" title="调整播放速度">
-                    </label>
-                                        <label class="rounded-xl border border-zinc-700 bg-zinc-950/60 p-3">
-                        <span class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">音量</span>
-                        <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="8" class="w-full">
-                    </label>
                 </div>
-            </section>
+            </div><!-- end Sheet Library card -->
 
-                        <section class="glass-panel flex flex-col gap-3 rounded-2xl p-3 lg:col-span-2">
-                <label class="flex min-h-[112px] flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-600 bg-zinc-800/80 p-3 text-center text-zinc-400 transition-all hover:border-cyan-400 hover:bg-zinc-700/80 hover:text-cyan-300 hover:shadow-[0_0_24px_rgba(34,211,238,0.18)]" title="支持 MusicXML(.xml/.mxl)、MIDI(.mid/.midi)、JSON 曲谱文件">
-                    <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-600 bg-zinc-950 text-2xl text-cyan-300 shadow-inner">+</span>
-                    <span class="text-base font-black">传曲谱</span>
-                    <span class="mt-1 text-xs text-zinc-500">XML / MXL / MIDI / JSON</span>
-                    <input type="file" id="upload-sheet" class="hidden" accept=".xml,.mxl,.mid,.midi,.json">
-                </label>
-                <div class="grid grid-cols-2 gap-2">
-                    <button id="btn-play-pause" class="rounded-xl border border-cyan-400/30 bg-zinc-900 px-4 py-3 text-sm font-black text-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.14)] transition-all hover:border-cyan-300 hover:bg-cyan-400/10 hover:text-cyan-100">播放</button>
-                    <button id="btn-reset" class="rounded-xl border border-zinc-600 bg-zinc-800 px-4 py-3 text-sm font-black text-zinc-200 transition-all hover:border-cyan-400 hover:text-cyan-300 hover:shadow-[0_0_18px_rgba(34,211,238,0.16)]">重置</button>
-                </div>
-            </section>
+        </div><!-- end controls row -->
 
-            <section class="glass-panel rounded-2xl p-3 lg:col-span-7">
-                <div class="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                        <p class="text-[11px] uppercase tracking-[0.28em] text-zinc-500">Sheet Library</p>
-                        <h2 class="text-lg font-black text-zinc-50">本地曲谱库</h2>
-                    </div>
-                    <span id="playlist-count" class="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1 text-xs text-zinc-400">加载中</span>
-                </div>
-                <div class="max-h-[138px] overflow-auto rounded-xl border border-zinc-700 bg-zinc-950/45 no-scrollbar">
-                    <table class="w-full text-left text-xs">
-                        <thead class="sticky top-0 z-10 border-b border-zinc-700 bg-zinc-900/95 text-[10px] uppercase tracking-[0.18em] text-zinc-500 backdrop-blur">
-                            <tr>
-                                <th class="px-3 py-2 font-bold">ID</th>
-                                <th class="px-3 py-2 font-bold">Title</th>
-                                <th class="px-3 py-2 font-bold">Type</th>
-                                <th class="px-3 py-2 font-bold">Status</th>
-                                <th class="px-3 py-2 text-right font-bold">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="playlist-container" class="divide-y divide-zinc-800">
-                            <tr><td colspan="5" class="px-3 py-8 text-center text-zinc-500">加载中...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+        <!-- Hidden elements required by app.js -->
+        <div style="display:none;">
+            <span id="current-song-name">《小星星》</span>
+            <span id="instruction-text">内置《小星星》示例曲谱。</span>
+            <input type="range" id="progress-slider" min="0" max="100" value="0" step="0.1">
+            <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="8">
+            <button id="btn-skip-backward"></button>
+            <button id="btn-skip-forward"></button>
         </div>
+
     </header>
 
-    <main class="flex-1 min-h-0 overflow-hidden bg-zinc-900 p-2 lg:p-4">
-        <section class="glass-panel mx-auto flex h-full max-w-[1600px] flex-col overflow-hidden rounded-3xl">
-            <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950/55 px-4 py-2 lg:py-3">
-                <div class="min-w-0">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-400">Score View / Piano Roll</p>
-                    <div class="mt-1 truncate text-sm text-zinc-400">
-                        当前曲目: <span id="current-song-name" class="font-bold text-cyan-300">《小星星》</span>
-                        <span class="mx-2 text-zinc-700">/</span>
-                        <span id="instruction-text">内置《小星星》示例曲谱。上传文件开始练习。</span>
-                    </div>
-                </div>
-                <div class="flex min-w-[280px] flex-1 items-center gap-3 lg:max-w-[680px]">
-                    <button id="btn-skip-backward" class="shrink-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:border-cyan-400 hover:text-cyan-300" title="-1小节(按4拍算)">-4拍</button>
-                    <input type="range" id="progress-slider" class="w-full cursor-pointer appearance-none rounded-lg bg-zinc-700" min="0" max="100" value="0" step="0.1">
-                    <button id="btn-skip-forward" class="shrink-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:border-cyan-400 hover:text-cyan-300" title="+1小节(按4拍算)">+4拍</button>
-                </div>
-            </div>
-
-                        <div class="relative flex-1 min-h-0 p-2 lg:p-4">
-                <div id="sheet-container" class="relative h-full min-h-0 w-full overflow-hidden rounded-2xl border border-cyan-400/20 bg-zinc-950 shadow-[inset_0_0_70px_rgba(0,0,0,0.58),0_0_34px_rgba(34,211,238,0.08)]"></div>
-            </div>
-        </section>
+    <!-- ══════════════════════════════════════════
+         SHEET DISPLAY
+    ══════════════════════════════════════════ -->
+    <main class="flex-1 min-h-0 overflow-hidden px-3 py-2" style="background:#111113;">
+        <div id="sheet-container" class="w-full h-full rounded-xl overflow-hidden"
+             style="background:#0a0e14; border:1px solid #1a2030; box-shadow:inset 0 0 60px rgba(0,0,0,0.55), 0 0 28px rgba(34,211,238,0.05);">
+        </div>
     </main>
 
-    <footer class="h-32 shrink-0 border-t-4 border-zinc-950 bg-zinc-800 p-2 overflow-x-auto shadow-[0_-16px_34px_rgba(0,0,0,0.42)] lg:h-36">
-        <div class="flex h-full min-w-max mx-auto justify-center relative" id="virtual-keyboard"></div>
+    <!-- ══════════════════════════════════════════
+         PIANO KEYBOARD
+    ══════════════════════════════════════════ -->
+    <footer class="shrink-0 overflow-x-auto overflow-y-hidden"
+            style="height:128px; background:#18181a; border-top:1px solid #28282c;">
+        <div id="virtual-keyboard"
+             class="relative flex items-stretch justify-center"
+             style="height:100%; min-width:max-content; padding:5px 8px 0;">
+        </div>
     </footer>
 
-    <div id="parse-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex-col items-center justify-center backdrop-blur-sm">
-        <h2 class="text-xl font-bold text-white mb-4" id="parse-modal-title">正在解析曲谱...</h2>
-        <div class="w-72 bg-zinc-800 rounded-full h-3 overflow-hidden border border-zinc-600 shadow-inner">
-            <div id="parse-progress-bar" class="parse-progress h-full bg-gradient-to-r from-cyan-400 to-emerald-400 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.45)]" style="width: 0%"></div>
+    <!-- ══════════════════════════════════════════
+         PARSE MODAL
+    ══════════════════════════════════════════ -->
+    <div id="parse-modal"
+         class="fixed inset-0 z-50 hidden flex-col items-center justify-center"
+         style="background:rgba(0,0,0,0.82); backdrop-filter:blur(4px);">
+        <div style="background:#1c1c1f; border:1px solid #3f3f46; border-radius:1rem; padding:2rem; min-width:300px; display:flex; flex-direction:column; align-items:center; gap:1rem;">
+            <h2 class="text-sm font-bold text-white" id="parse-modal-title">正在解析曲谱...</h2>
+            <div style="width:100%; height:5px; background:#27272a; border-radius:999px; overflow:hidden;">
+                <div id="parse-progress-bar" class="parse-progress"
+                     style="height:100%; width:0%; background:linear-gradient(90deg,#22d3ee,#34d399); border-radius:999px;"></div>
+            </div>
+            <p style="font-size:0.72rem; color:#71717a;" id="parse-modal-detail">读取文件中...</p>
         </div>
-        <p class="text-zinc-400 mt-4 text-sm" id="parse-modal-detail">读取文件中...</p>
     </div>
 
     <script>
+        /* Sync native mode select → app.js hidden buttons */
+        document.getElementById('mode-select-native')?.addEventListener('change', function () {
+            if (this.value === 'auto') document.getElementById('mode-auto').click();
+            else if (this.value === 'wait') document.getElementById('mode-wait').click();
+        });
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./service-worker.js')
-                    .then((registration) => {
-                        console.log('[SW] ServiceWorker 注册成功:', registration.scope);
-                    })
-                    .catch((error) => {
-                        console.warn('[SW] ServiceWorker 注册失败:', error);
-                    });
+                    .then(r => console.log('[SW] 注册成功:', r.scope))
+                    .catch(e => console.warn('[SW] 注册失败:', e));
             });
         }
     </script>
