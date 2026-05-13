@@ -24,8 +24,8 @@ export class AudioEngine {
         return this.audioCtx;
     }
 
-    /** 初始化音频上下文与音色链路 */
-    async init() {
+    /** 初始化音频上下文与基础链路，不强制加载钢琴音色 */
+    async ensureContext() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -50,6 +50,13 @@ export class AudioEngine {
             await this.audioCtx.resume();
         }
 
+        return this.audioCtx;
+    }
+
+    /** 初始化音频上下文与音色链路 */
+    async init() {
+        await this.ensureContext();
+
         if (!this.pianoInstrument) {
             if (!this.loadingPromise) {
                 this.loadingPromise = this._loadSoundfont().finally(() => {
@@ -60,6 +67,25 @@ export class AudioEngine {
         }
 
         return this.pianoInstrument;
+    }
+
+    /** 播放节拍器提示音 */
+    async playMetronomeTick(accent = false) {
+        const ctx = await this.ensureContext();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.value = accent ? 1320 : 880;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(accent ? 0.18 : 0.11, now + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+
+        osc.connect(gain);
+        gain.connect(this.masterCompressor);
+        osc.start(now);
+        osc.stop(now + 0.08);
     }
 
     /** 加载 Soundfont 钢琴音色库 */

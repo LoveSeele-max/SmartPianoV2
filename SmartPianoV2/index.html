@@ -275,8 +275,7 @@
                 <div class="flex flex-col justify-end h-full">
                     <span class="ctrl-label">Metronome</span>
                     <div class="flex items-center" style="height:28px;">
-                        <div class="tog-track" id="metronome-toggle"
-                             onclick="this.classList.toggle('on')">
+                        <div class="tog-track" id="metronome-toggle">
                             <div class="tog-thumb"></div>
                         </div>
                     </div>
@@ -387,12 +386,6 @@
     </div>
 
     <script>
-        /* Sync native mode select → app.js hidden buttons */
-        document.getElementById('mode-select-native')?.addEventListener('change', function () {
-            if (this.value === 'auto') document.getElementById('mode-auto').click();
-            else if (this.value === 'wait') document.getElementById('mode-wait').click();
-        });
-
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./service-worker.js')

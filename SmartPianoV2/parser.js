@@ -14,6 +14,9 @@ export function parseMusicXML(xmlText) {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
 
+    const parserError = xmlDoc.querySelector('parsererror');
+    if (parserError) throw new Error('MusicXML 格式无效');
+
     // 尝试提取 BPM
     let extractedBpm = 100;
     const soundEl = xmlDoc.querySelector('sound');
@@ -22,29 +25,102 @@ export function parseMusicXML(xmlText) {
     }
 
     const notes = [];
-    const noteElements = xmlDoc.querySelectorAll('note');
-    let divisions = 1;
-    const divsEl = xmlDoc.querySelector('divisions');
-    if (divsEl) divisions = parseInt(divsEl.textContent) || 1;
+    const stepToSemitone = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    const typeDurMap = {
+        maxima: 32,
+        longa: 16,
+        breve: 8,
+        whole: 4,
+        half: 2,
+        quarter: 1,
+        eighth: 0.5,
+        '16th': 0.25,
+        '32nd': 0.125,
+        '64th': 0.0625
+    };
 
-    noteElements.forEach(noteEl => {
-        if (noteEl.querySelector('rest')) return;
-        const pitch = noteEl.querySelector('pitch');
-        if (!pitch) return;
+    function getDurationBeat(el, divisions) {
+        const durationEl = el.querySelector(':scope > duration');
+        if (durationEl) {
+            const raw = parseFloat(durationEl.textContent);
+            if (Number.isFinite(raw) && raw > 0) {
+                return Math.max(0.0625, raw / divisions);
+            }
+        }
 
-        const step = pitch.querySelector('step')?.textContent || 'C';
-        const octave = parseInt(pitch.querySelector('octave')?.textContent || '4');
-        const durEl = noteEl.querySelector('duration');
-        const duration = durEl ? Math.round(parseInt(durEl.textContent) / divisions * 4) / 4 : 1;
+        let duration = typeDurMap[el.querySelector(':scope > type')?.textContent || 'quarter'] || 1;
+        const dots = el.querySelectorAll(':scope > dot').length;
+        let add = duration / 2;
+        for (let i = 0; i < dots; i++) {
+            duration += add;
+            add /= 2;
+        }
+        return duration;
+    }
 
-        // 稳健的时值计算逻辑
-        const type = noteEl.querySelector('type')?.textContent || 'quarter';
-        const durMap = { 'whole': 4, 'half': 2, 'quarter': 1, 'eighth': 0.5, '16th': 0.25 };
-        const finalDur = durMap[type] || (duration > 1 ? 2 : 1);
+    function pitchToNoteName(pitchEl) {
+        const step = pitchEl.querySelector(':scope > step')?.textContent || 'C';
+        const octave = parseInt(pitchEl.querySelector(':scope > octave')?.textContent || '4');
+        const alter = parseInt(pitchEl.querySelector(':scope > alter')?.textContent || '0');
+        const midi = (octave + 1) * 12 + stepToSemitone[step] + alter;
+        return lookupByMidi(midi)?.name || null;
+    }
 
-        notes.push({ note: step + octave, fingering: 1, duration: finalDur });
+    const parts = xmlDoc.querySelectorAll('part');
+    parts.forEach(partEl => {
+        let divisions = 1;
+        let cursorBeat = 0;
+        let lastNoteStartBeat = 0;
+
+        partEl.querySelectorAll(':scope > measure').forEach(measureEl => {
+            const divsEl = measureEl.querySelector(':scope > attributes > divisions');
+            if (divsEl) divisions = parseInt(divsEl.textContent) || divisions;
+
+            const measureSoundEl = measureEl.querySelector(':scope > direction sound[tempo], :scope > sound[tempo]');
+            if (measureSoundEl) {
+                const tempo = parseInt(measureSoundEl.getAttribute('tempo'));
+                if (Number.isFinite(tempo) && tempo > 0) extractedBpm = tempo;
+            }
+
+            Array.from(measureEl.children).forEach(child => {
+                if (child.tagName === 'backup') {
+                    cursorBeat = Math.max(0, cursorBeat - getDurationBeat(child, divisions));
+                    return;
+                }
+
+                if (child.tagName === 'forward') {
+                    cursorBeat += getDurationBeat(child, divisions);
+                    return;
+                }
+
+                if (child.tagName !== 'note') return;
+
+                const durationBeat = getDurationBeat(child, divisions);
+                const isChordTone = !!child.querySelector(':scope > chord');
+                const startTimeBeat = isChordTone ? lastNoteStartBeat : cursorBeat;
+
+                if (!child.querySelector(':scope > rest')) {
+                    const pitch = child.querySelector(':scope > pitch');
+                    const noteName = pitch ? pitchToNoteName(pitch) : null;
+                    if (noteName) {
+                        notes.push({
+                            note: noteName,
+                            fingering: 1,
+                            startTimeBeat,
+                            durationBeat
+                        });
+                    }
+                }
+
+                if (!isChordTone) {
+                    lastNoteStartBeat = startTimeBeat;
+                    cursorBeat += durationBeat;
+                }
+            });
+        });
     });
 
+    notes.sort((a, b) => a.startTimeBeat - b.startTimeBeat || getNoteInfo(a.note).midi - getNoteInfo(b.note).midi);
     return { notes, bpm: extractedBpm };
 }
 

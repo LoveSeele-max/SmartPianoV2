@@ -45,6 +45,8 @@ let animationId = null;
 let uniqueBeats = [];
 let currentWaitIndex = 0;
 let practiceCurrentBeat = 0;
+let metronomeTimerId = null;
+let metronomeBeatIndex = 0;
 
 // Canvas 卷帘窗变量
 let canvasCtx = null;
@@ -96,6 +98,8 @@ const btnReset = document.getElementById('btn-reset');
 const btnAuto = document.getElementById('mode-auto');
 const btnWait = document.getElementById('mode-wait');
 const modeSlider = document.getElementById('mode-slider');
+const modeSelectNative = document.getElementById('mode-select-native');
+const metronomeToggle = document.getElementById('metronome-toggle');
 const instructionText = document.getElementById('instruction-text');
 const currentSongNameUI = document.getElementById('current-song-name');
 const uploadInput = document.getElementById('upload-sheet');
@@ -460,7 +464,53 @@ function setPlayButtonAppearance(state) {
     }
 }
 
+function setMetronomeToggle(active) {
+    if (metronomeToggle) metronomeToggle.classList.toggle('on', active);
+}
+
+function stopMetronome(message = '节拍器已停止。') {
+    if (metronomeTimerId) {
+        clearInterval(metronomeTimerId);
+        metronomeTimerId = null;
+    }
+    metronomeBeatIndex = 0;
+    isPlaying = false;
+    isPaused = false;
+    btnPlayPause.innerText = '播放';
+    setPlayButtonAppearance('ready');
+    setMetronomeToggle(false);
+    instructionText.innerText = message;
+}
+
+async function startMetronome() {
+    if (metronomeTimerId) stopMetronome();
+
+    isPlaying = true;
+    isPaused = false;
+    btnPlayPause.innerText = '停止';
+    setPlayButtonAppearance('playing');
+    setMetronomeToggle(true);
+    instructionText.innerText = `节拍器运行中：${bpm} BPM`;
+
+    const tick = () => {
+        audioEngine.playMetronomeTick(metronomeBeatIndex % 4 === 0);
+        metronomeBeatIndex++;
+    };
+
+    tick();
+    metronomeTimerId = setInterval(tick, msPerBeat);
+}
+
 async function togglePlayPause() {
+    if (currentMode === 'metro') {
+        if (isPlaying) {
+            stopMetronome();
+        } else {
+            await startMetronome();
+        }
+        return;
+    }
+
     if (!isPlaying && !isPaused) {
         await startPractice();
     } else if (isPlaying && !isPaused) {
@@ -565,15 +615,21 @@ function finishPlaying() {
     isPlaying = false;
     isPaused = false;
         cancelAnimationFrame(animationId);
+    audioEngine.stopAllNotes();
     instructionText.innerText = '太棒了！曲目播放完成。';
     btnPlayPause.innerText = '重新播放';
     setPlayButtonAppearance('ready');
 }
 
 function resetPractice() {
+    if (metronomeTimerId) {
+        stopMetronome('节拍器已重置。');
+    }
+
     isPlaying = false;
     isPaused = false;
     cancelAnimationFrame(animationId);
+    audioEngine.stopAllNotes();
 
     currentBeat = 0;
     progressSlider.value = 0;
@@ -585,7 +641,11 @@ function resetPractice() {
 
     btnPlayPause.innerText = '播放';
     setPlayButtonAppearance('ready');
-    instructionText.innerText = currentMode === 'wait' ? '练习模式就绪，点击播放。' : '自动播放引擎就绪。';
+    if (currentMode === 'metro') {
+        instructionText.innerText = '节拍器就绪，点击播放。';
+    } else {
+        instructionText.innerText = currentMode === 'wait' ? '练习模式就绪，点击播放。' : '自动播放引擎就绪。';
+    }
 }
 
 function seekToBeat(targetBeat) {
@@ -700,18 +760,27 @@ function handleNoteOff(midiNumber, specificNode = null) {
 
 function setMode(mode) {
     if (isPlaying || isPaused) resetPractice();
+    if (metronomeTimerId) stopMetronome();
     currentMode = mode;
+    if (modeSelectNative && modeSelectNative.value !== mode) modeSelectNative.value = mode;
 
     if (currentMode === 'auto') {
         btnAuto.classList.replace('text-slate-400', 'text-white');
         btnWait.classList.replace('text-white', 'text-slate-400');
         modeSlider.style.transform = 'translateX(0)';
+        setMetronomeToggle(false);
         instructionText.innerText = '已切换至自动播放模式。';
-    } else {
+    } else if (currentMode === 'wait') {
         btnWait.classList.replace('text-slate-400', 'text-white');
         btnAuto.classList.replace('text-white', 'text-slate-400');
         modeSlider.style.transform = 'translateX(100%)';
+        setMetronomeToggle(false);
         instructionText.innerText = '已切换至练习模式：你需要弹对琥珀色高亮琴键，谱面才会前进。';
+    } else {
+        setMetronomeToggle(false);
+        btnPlayPause.innerText = '播放';
+        setPlayButtonAppearance('ready');
+        instructionText.innerText = '已切换至节拍器模式。';
     }
 }
 
@@ -728,7 +797,9 @@ function hideParseModal() {
     parseModal.classList.replace('flex', 'hidden');
 }
 
-function applyParsedSong(songData, fileName) {
+function applyParsedSong(songData, fileName, options = {}) {
+    const shouldSaveToLibrary = options.saveToLibrary !== false;
+
     songData.data = songData.data
         .map((item, idx) => ({ ...item, fingering: item.fingering || Math.min(5, (idx % 5) + 1) }))
         .filter(item => getNoteInfo(item.note));
@@ -756,12 +827,16 @@ function applyParsedSong(songData, fileName) {
         msPerBeat = (60 / bpm) * 1000;
         bpmUI.value = bpm;
 
-                // 自动保存到本地库
-        saveToLibrary(songData, fileName).then(() => {
+        if (shouldSaveToLibrary) {
+            // 自动保存到本地库
+            saveToLibrary(songData, fileName).then(() => {
+                updatePlaylistUI();
+            }).catch(err => {
+                console.warn('保存到本地库失败:', err);
+            });
+        } else {
             updatePlaylistUI();
-        }).catch(err => {
-            console.warn('保存到本地库失败:', err);
-        });
+        }
 
         renderSheet();
         resetPractice();
@@ -779,9 +854,16 @@ async function updatePlaylistUI() {
         // 如果播放列表容器存在则渲染
         const playlistEl = document.getElementById('playlist-container');
         if (!playlistEl) return;
+        playlistEl.replaceChildren();
 
-                if (count === 0) {
-            playlistEl.innerHTML = '<tr><td colspan="5" class="px-3 py-8 text-center text-zinc-500">暂无保存的曲谱，上传后自动保存。</td></tr>';
+        if (count === 0) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 5;
+            cell.className = 'px-3 py-8 text-center text-zinc-500';
+            cell.textContent = '暂无保存的曲谱，上传后自动保存。';
+            row.appendChild(cell);
+            playlistEl.appendChild(row);
             const countEl = document.getElementById('playlist-count');
             if (countEl) countEl.textContent = '0 首';
             return;
@@ -791,28 +873,74 @@ async function updatePlaylistUI() {
         const countEl = document.getElementById('playlist-count');
         if (countEl) countEl.textContent = `${sheets.length} 首`;
 
-                let html = '';
         sheets.forEach(sheet => {
             const ext = (sheet.fileName || sheet.name || '').split('.').pop()?.toUpperCase() || 'SHEET';
             const isLoaded = currentSongNameUI.innerText.includes(sheet.name);
             const statusClass = isLoaded ? 's-playing' : 's-ready';
             const statusText = isLoaded ? 'Playing' : 'Ready';
-            html += `
-                <tr onclick="window.loadSheetFromLibrary(${sheet.id})">
-                    <td>${sheet.id}</td>
-                    <td class="title-cell">${sheet.name}</td>
-                    <td>${ext}</td>
-                    <td><span class="${statusClass}">${statusText}</span></td>
-                    <td style="text-align:right;">
-                        <button class="act-btn" title="播放" onclick="event.stopPropagation(); window.loadSheetFromLibrary(${sheet.id})">▶</button>
-                        <button class="act-btn" title="停止" onclick="event.stopPropagation();">■</button>
-                        <button class="act-btn" title="编辑" onclick="event.stopPropagation();">✎</button>
-                        <button class="act-btn del" title="删除" onclick="event.stopPropagation(); window.deleteSheetFromLibrary(${sheet.id})">🗑</button>
-                    </td>
-                </tr>
-            `;
+
+            const row = document.createElement('tr');
+            row.addEventListener('click', () => window.loadSheetFromLibrary(sheet.id));
+
+            const idCell = document.createElement('td');
+            idCell.textContent = sheet.id;
+
+            const titleCell = document.createElement('td');
+            titleCell.className = 'title-cell';
+            titleCell.textContent = sheet.name;
+
+            const typeCell = document.createElement('td');
+            typeCell.textContent = ext;
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = statusClass;
+            statusBadge.textContent = statusText;
+            statusCell.appendChild(statusBadge);
+
+            const actionsCell = document.createElement('td');
+            actionsCell.style.textAlign = 'right';
+
+            const playBtn = document.createElement('button');
+            playBtn.className = 'act-btn';
+            playBtn.title = '播放';
+            playBtn.textContent = '▶';
+            playBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                window.loadSheetFromLibrary(sheet.id);
+            });
+
+            const stopBtn = document.createElement('button');
+            stopBtn.className = 'act-btn';
+            stopBtn.title = '停止';
+            stopBtn.textContent = '■';
+            stopBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                resetPractice();
+            });
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'act-btn';
+            editBtn.title = '编辑';
+            editBtn.textContent = '✎';
+            editBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                instructionText.innerText = '编辑功能暂未开放。';
+            });
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'act-btn del';
+            deleteBtn.title = '删除';
+            deleteBtn.textContent = '🗑';
+            deleteBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                window.deleteSheetFromLibrary(sheet.id);
+            });
+
+            actionsCell.append(playBtn, stopBtn, editBtn, deleteBtn);
+            row.append(idCell, titleCell, typeCell, statusCell, actionsCell);
+            playlistEl.appendChild(row);
         });
-        playlistEl.innerHTML = html;
     } catch (err) {
         console.warn('更新播放列表失败:', err);
     }
@@ -824,7 +952,7 @@ window.loadSheetFromLibrary = async function(id) {
         const { getSheetById } = await import('./sheetLibrary.js');
         const sheet = await getSheetById(id);
         if (sheet) {
-            applyParsedSong(sheet, sheet.fileName || sheet.name);
+            applyParsedSong(sheet, sheet.fileName || sheet.name, { saveToLibrary: false });
         }
     } catch (err) {
         console.error('加载本地曲谱失败:', err);
@@ -847,6 +975,19 @@ btnPlayPause.addEventListener('click', togglePlayPause);
 btnReset.addEventListener('click', resetPractice);
 btnAuto.addEventListener('click', () => setMode('auto'));
 btnWait.addEventListener('click', () => setMode('wait'));
+if (modeSelectNative) {
+    modeSelectNative.addEventListener('change', (e) => setMode(e.target.value));
+}
+if (metronomeToggle) {
+    metronomeToggle.addEventListener('click', () => {
+        if (currentMode !== 'metro') setMode('metro');
+        if (isPlaying) {
+            stopMetronome();
+        } else {
+            startMetronome();
+        }
+    });
+}
 
 progressSlider.addEventListener('input', (e) => seekToBeat(parseFloat(e.target.value)));
 btnSkipBackward.addEventListener('click', () => seekToBeat(currentBeat - 4));
@@ -862,7 +1003,16 @@ bpmUI.addEventListener('change', (e) => {
     msPerBeat = (60 / bpm) * 1000;
 
     if (isPlaying) {
-        playStartTime = performance.now() - (currentBeat * msPerBeat);
+        if (currentMode === 'metro' && metronomeTimerId) {
+            clearInterval(metronomeTimerId);
+            metronomeTimerId = setInterval(() => {
+                audioEngine.playMetronomeTick(metronomeBeatIndex % 4 === 0);
+                metronomeBeatIndex++;
+            }, msPerBeat);
+            instructionText.innerText = `节拍器运行中：${bpm} BPM`;
+        } else {
+            playStartTime = performance.now() - (currentBeat * msPerBeat);
+        }
     }
 });
 
