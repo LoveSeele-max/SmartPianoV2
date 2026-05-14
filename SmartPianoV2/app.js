@@ -7,7 +7,7 @@ import { AudioEngine } from './audioEngine.js';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
-import { saveToLibrary, getAllSheets, deleteFromLibrary, getLibraryStats } from './sheetLibrary.js';
+import { saveToLibrary, getAllSheets, deleteFromLibrary, getSheetById } from './sheetLibrary.js';
 
 // ==================== 核心状态 ====================
 const audioEngine = new AudioEngine();
@@ -47,6 +47,11 @@ let currentWaitIndex = 0;
 let practiceCurrentBeat = 0;
 let metronomeTimerId = null;
 let metronomeBeatIndex = 0;
+let playbackSessionId = 0;
+let songLoadRequestId = 0;
+let currentSheetId = null;
+let libraryCache = [];
+let playlistRenderRequestId = 0;
 
 // Canvas 卷帘窗变量
 let canvasCtx = null;
@@ -468,17 +473,26 @@ function setMetronomeToggle(active) {
     if (metronomeToggle) metronomeToggle.classList.toggle('on', active);
 }
 
-function stopMetronome(message = '节拍器已停止。') {
+function stopActivePlayback() {
+    playbackSessionId++;
+    isPlaying = false;
+    isPaused = false;
+    cancelAnimationFrame(animationId);
+    animationId = null;
+    audioEngine.stopAllNotes();
+
     if (metronomeTimerId) {
         clearInterval(metronomeTimerId);
         metronomeTimerId = null;
     }
     metronomeBeatIndex = 0;
-    isPlaying = false;
-    isPaused = false;
+    setMetronomeToggle(false);
+}
+
+function stopMetronome(message = '节拍器已停止。') {
+    stopActivePlayback();
     btnPlayPause.innerText = '播放';
     setPlayButtonAppearance('ready');
-    setMetronomeToggle(false);
     instructionText.innerText = message;
 }
 
@@ -497,6 +511,7 @@ async function startMetronome() {
         metronomeBeatIndex++;
     };
 
+    playbackSessionId++;
     tick();
     metronomeTimerId = setInterval(tick, msPerBeat);
 }
@@ -517,6 +532,7 @@ async function togglePlayPause() {
         // 暂停
         isPlaying = false;
         isPaused = true;
+        playbackSessionId++;
                 cancelAnimationFrame(animationId);
         btnPlayPause.innerText = '继续';
         setPlayButtonAppearance('ready');
@@ -525,16 +541,17 @@ async function togglePlayPause() {
                 // 继续
         isPlaying = true;
         isPaused = false;
+        const sessionId = ++playbackSessionId;
         btnPlayPause.innerText = '暂停';
         setPlayButtonAppearance('playing');
         instructionText.innerText = currentMode === 'auto' ? '自动播放中...' : '练习模式：请弹奏到达青色激光线的琥珀色音符。';
         await audioEngine.init();
 
-        if (!isPlaying || isPaused) return;
+        if (!isPlaying || isPaused || sessionId !== playbackSessionId) return;
 
         if (currentMode === 'auto') {
             playStartTime = performance.now() - (currentBeat * msPerBeat);
-            requestAnimationFrame(playLoop);
+            animationId = requestAnimationFrame(() => playLoop(sessionId));
         } else {
             highlightWaitingNotes();
         }
@@ -544,16 +561,17 @@ async function togglePlayPause() {
 async function startPractice() {
     isPlaying = true;
     isPaused = false;
+    const sessionId = ++playbackSessionId;
     btnPlayPause.innerText = '暂停';
     setPlayButtonAppearance('playing');
     await audioEngine.init();
 
-    if (!isPlaying || isPaused) return;
+    if (!isPlaying || isPaused || sessionId !== playbackSessionId) return;
 
     if (currentMode === 'auto') {
         instructionText.innerText = '自动播放中...';
         playStartTime = performance.now() - (currentBeat * msPerBeat);
-        requestAnimationFrame(playLoop);
+        animationId = requestAnimationFrame(() => playLoop(sessionId));
     } else {
         instructionText.innerText = '练习模式：请弹奏到达青色激光线的琥珀色音符。';
         const beatsSet = new Set();
@@ -574,8 +592,8 @@ async function startPractice() {
     }
 }
 
-function playLoop() {
-    if (!isPlaying) return;
+function playLoop(sessionId) {
+    if (!isPlaying || sessionId !== playbackSessionId) return;
 
     const now = performance.now();
     currentBeat = (now - playStartTime) / msPerBeat;
@@ -592,11 +610,16 @@ function playLoop() {
                                 note.played = true;
 
                 handleNoteOn(note.midi).then((playedNode) => {
+                    if (sessionId !== playbackSessionId) {
+                        handleNoteOff(note.midi, playedNode);
+                        return;
+                    }
                     const gapMs = 40;
                     const durationMs = note.durationBeat * msPerBeat;
                     const offTime = durationMs > gapMs + 10 ? durationMs - gapMs : durationMs * 0.8;
 
                     setTimeout(() => {
+                        if (sessionId !== playbackSessionId) return;
                         handleNoteOff(note.midi, playedNode);
                     }, offTime);
                 });
@@ -605,15 +628,17 @@ function playLoop() {
     });
 
     if (currentBeat < globalTotalBeats && !allPlayed) {
-        animationId = requestAnimationFrame(playLoop);
+        animationId = requestAnimationFrame(() => playLoop(sessionId));
     } else {
-        setTimeout(finishPlaying, 1500);
+        setTimeout(() => finishPlaying(sessionId), 1500);
     }
 }
 
-function finishPlaying() {
+function finishPlaying(sessionId = playbackSessionId) {
+    if (sessionId !== playbackSessionId) return;
     isPlaying = false;
     isPaused = false;
+    playbackSessionId++;
         cancelAnimationFrame(animationId);
     audioEngine.stopAllNotes();
     instructionText.innerText = '太棒了！曲目播放完成。';
@@ -622,14 +647,7 @@ function finishPlaying() {
 }
 
 function resetPractice() {
-    if (metronomeTimerId) {
-        stopMetronome('节拍器已重置。');
-    }
-
-    isPlaying = false;
-    isPaused = false;
-    cancelAnimationFrame(animationId);
-    audioEngine.stopAllNotes();
+    stopActivePlayback();
 
     currentBeat = 0;
     progressSlider.value = 0;
@@ -724,7 +742,8 @@ function checkPracticeNote(midiNumber) {
             updatePracticeScroll();
             highlightWaitingNotes();
         } else {
-            setTimeout(finishPlaying, 500);
+            const sessionId = playbackSessionId;
+            setTimeout(() => finishPlaying(sessionId), 500);
         }
     }
 
@@ -797,39 +816,80 @@ function hideParseModal() {
     parseModal.classList.replace('flex', 'hidden');
 }
 
+function normalizeSongData(songData) {
+    const normalized = {
+        ...songData,
+        data: (songData.data || [])
+            .map((item, idx) => {
+                const noteInfo = getNoteInfo(item.note);
+                if (!noteInfo) return null;
+                const durationBeat = item.durationBeat || item.duration || 1;
+                return {
+                    ...item,
+                    midi: item.midi || noteInfo.midi,
+                    fingering: item.fingering || Math.min(5, (idx % 5) + 1),
+                    durationBeat,
+                    played: false
+                };
+            })
+            .filter(Boolean)
+    };
+
+    return normalized;
+}
+
+function loadDemoSong(message = '曲谱库已清空，已回到内置示例曲。') {
+    stopActivePlayback();
+    currentSheetId = null;
+    currentSongInfo = normalizeSongData(songs.twinkle);
+    currentSongNameUI.innerText = currentSongInfo.name;
+    bpm = currentSongInfo.bpm || 100;
+    msPerBeat = (60 / bpm) * 1000;
+    bpmUI.value = bpm;
+    renderSheet();
+    resetPractice();
+    instructionText.innerText = message;
+}
+
 function applyParsedSong(songData, fileName, options = {}) {
     const shouldSaveToLibrary = options.saveToLibrary !== false;
+    const delayMs = options.delayMs ?? (shouldSaveToLibrary ? 500 : 0);
+    const autoPlay = options.autoPlay === true;
+    const loadRequestId = ++songLoadRequestId;
+    const normalizedSong = normalizeSongData(songData);
 
-    songData.data = songData.data
-        .map((item, idx) => ({ ...item, fingering: item.fingering || Math.min(5, (idx % 5) + 1) }))
-        .filter(item => getNoteInfo(item.note));
+    stopActivePlayback();
 
-    if (songData.data.length === 0) {
+    if (normalizedSong.data.length === 0) {
         hideParseModal();
         alert('❌ 未找到有效音符');
         uploadInput.value = '';
         return;
     }
 
-    showParseModal('加载完成!', `解析到 ${songData.data.length} 个音符`, 100);
+    showParseModal('加载完成!', `解析到 ${normalizedSong.data.length} 个音符`, 100);
 
-    setTimeout(() => {
+    const commitSongLoad = () => {
+        if (loadRequestId !== songLoadRequestId) return;
+
         hideParseModal();
-        currentSongInfo = songData;
+        currentSongInfo = normalizedSong;
+        currentSheetId = options.libraryId ?? normalizedSong.id ?? null;
 
-        let displayName = songData.name || fileName.split('.').slice(0, -1).join('.');
+        let displayName = normalizedSong.name || fileName.split('.').slice(0, -1).join('.');
         if (!displayName.startsWith('《')) displayName = '《' + displayName;
         if (!displayName.endsWith('》')) displayName = displayName + '》';
         currentSongNameUI.innerText = displayName;
 
         // 更新 BPM
-        bpm = songData.bpm || 100;
+        bpm = normalizedSong.bpm || 100;
         msPerBeat = (60 / bpm) * 1000;
         bpmUI.value = bpm;
 
         if (shouldSaveToLibrary) {
             // 自动保存到本地库
-            saveToLibrary(songData, fileName).then(() => {
+            saveToLibrary(normalizedSong, fileName).then((savedId) => {
+                if (loadRequestId === songLoadRequestId) currentSheetId = savedId;
                 updatePlaylistUI();
             }).catch(err => {
                 console.warn('保存到本地库失败:', err);
@@ -841,8 +901,33 @@ function applyParsedSong(songData, fileName, options = {}) {
         renderSheet();
         resetPractice();
         uploadInput.value = '';
-        instructionText.innerText = `✅ 解析完成！共 ${songData.data.length} 个音符，BPM为 ${bpm}。`;
-    }, 500);
+        instructionText.innerText = `✅ 已加载 ${displayName}，共 ${normalizedSong.data.length} 个音符，BPM为 ${bpm}。`;
+        if (autoPlay) startPractice();
+    };
+
+    if (delayMs > 0) {
+        setTimeout(commitSongLoad, delayMs);
+    } else {
+        commitSongLoad();
+    }
+}
+
+async function parseUploadFile(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if (ext === 'mxl') {
+        const zip = await JSZip.loadAsync(await file.arrayBuffer());
+        let xmlFile = Object.values(zip.files).find(f => f.name.endsWith('.xml') && !f.name.startsWith('META-INF'));
+        if (!xmlFile) throw new Error('未找到XML');
+        const parsed = parseMusicXML(await xmlFile.async('string'));
+        return { name: file.name.replace(/\.mxl$/i, ''), data: parsed.notes, bpm: parsed.bpm };
+    }
+
+    if (ext === 'mid' || ext === 'midi') {
+        return parseSheetFile(file, await file.arrayBuffer());
+    }
+
+    return parseSheetFile(file, await file.text());
 }
 
 // ==================== 播放列表 UI ====================
@@ -850,32 +935,38 @@ function applyParsedSong(songData, fileName, options = {}) {
 /** 更新播放列表 UI */
 async function updatePlaylistUI() {
     try {
-        const count = await getLibraryStats();
-        // 如果播放列表容器存在则渲染
+        const renderRequestId = ++playlistRenderRequestId;
         const playlistEl = document.getElementById('playlist-container');
         if (!playlistEl) return;
-        playlistEl.replaceChildren();
 
-        if (count === 0) {
+        const sheets = await getAllSheets();
+        if (renderRequestId !== playlistRenderRequestId) return;
+
+        libraryCache = sheets;
+        const fragment = document.createDocumentFragment();
+
+        if (sheets.length === 0) {
+            libraryCache = [];
             const row = document.createElement('tr');
             const cell = document.createElement('td');
             cell.colSpan = 5;
             cell.className = 'px-3 py-8 text-center text-zinc-500';
             cell.textContent = '暂无保存的曲谱，上传后自动保存。';
             row.appendChild(cell);
-            playlistEl.appendChild(row);
+            fragment.appendChild(row);
             const countEl = document.getElementById('playlist-count');
             if (countEl) countEl.textContent = '0 首';
+            playlistEl.replaceChildren(fragment);
             return;
         }
 
-        const sheets = await getAllSheets();
+        const displayIds = new Map([...sheets].reverse().map((sheet, index) => [sheet.id, index + 1]));
         const countEl = document.getElementById('playlist-count');
         if (countEl) countEl.textContent = `${sheets.length} 首`;
 
         sheets.forEach(sheet => {
             const ext = (sheet.fileName || sheet.name || '').split('.').pop()?.toUpperCase() || 'SHEET';
-            const isLoaded = currentSongNameUI.innerText.includes(sheet.name);
+            const isLoaded = sheet.id === currentSheetId;
             const statusClass = isLoaded ? 's-playing' : 's-ready';
             const statusText = isLoaded ? 'Playing' : 'Ready';
 
@@ -883,7 +974,7 @@ async function updatePlaylistUI() {
             row.addEventListener('click', () => window.loadSheetFromLibrary(sheet.id));
 
             const idCell = document.createElement('td');
-            idCell.textContent = sheet.id;
+            idCell.textContent = displayIds.get(sheet.id) || sheet.id;
 
             const titleCell = document.createElement('td');
             titleCell.className = 'title-cell';
@@ -907,7 +998,7 @@ async function updatePlaylistUI() {
             playBtn.textContent = '▶';
             playBtn.addEventListener('click', (event) => {
                 event.stopPropagation();
-                window.loadSheetFromLibrary(sheet.id);
+                window.loadSheetFromLibrary(sheet.id, { autoPlay: true });
             });
 
             const stopBtn = document.createElement('button');
@@ -939,20 +1030,27 @@ async function updatePlaylistUI() {
 
             actionsCell.append(playBtn, stopBtn, editBtn, deleteBtn);
             row.append(idCell, titleCell, typeCell, statusCell, actionsCell);
-            playlistEl.appendChild(row);
+            fragment.appendChild(row);
         });
+
+        playlistEl.replaceChildren(fragment);
     } catch (err) {
         console.warn('更新播放列表失败:', err);
     }
 }
 
 /** 从本地库加载曲谱 */
-window.loadSheetFromLibrary = async function(id) {
+window.loadSheetFromLibrary = async function(id, options = {}) {
     try {
-        const { getSheetById } = await import('./sheetLibrary.js');
-        const sheet = await getSheetById(id);
+        if (!Number.isFinite(id)) return;
+        const sheet = libraryCache.find(item => item.id === id) || await getSheetById(id);
         if (sheet) {
-            applyParsedSong(sheet, sheet.fileName || sheet.name, { saveToLibrary: false });
+            applyParsedSong(sheet, sheet.fileName || sheet.name, {
+                saveToLibrary: false,
+                libraryId: id,
+                autoPlay: options.autoPlay === true,
+                delayMs: 0
+            });
         }
     } catch (err) {
         console.error('加载本地曲谱失败:', err);
@@ -962,10 +1060,29 @@ window.loadSheetFromLibrary = async function(id) {
 /** 从本地库删除曲谱 */
 window.deleteSheetFromLibrary = async function(id) {
     try {
+        const wasCurrentSheet = id === currentSheetId;
         await deleteFromLibrary(id);
-        updatePlaylistUI();
+        const remainingSheets = await getAllSheets();
+
+        if (remainingSheets.length === 0) {
+            libraryCache = [];
+            loadDemoSong('曲谱库已清空，下一次上传会从 ID 1 开始。');
+            await updatePlaylistUI();
+            return;
+        }
+
+        libraryCache = remainingSheets;
+
+        if (wasCurrentSheet) {
+            await window.loadSheetFromLibrary(remainingSheets[0].id);
+            instructionText.innerText = '当前曲谱已删除，已切换到曲谱库中的下一首。';
+            return;
+        }
+
+        await updatePlaylistUI();
     } catch (err) {
         console.error('删除曲谱失败:', err);
+        instructionText.innerText = '删除曲谱失败，请刷新页面后重试。';
     }
 };
 
@@ -1022,29 +1139,40 @@ document.getElementById('volume-slider').addEventListener('input', (e) => {
 
 // 文件上传
 uploadInput.addEventListener('change', async function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop().toLowerCase();
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     try {
-        if (ext === 'mxl') {
-            showParseModal('正在解压 MXL...', file.name, 20);
-            const zip = await JSZip.loadAsync(await file.arrayBuffer());
-            let xmlFile = Object.values(zip.files).find(f => f.name.endsWith('.xml') && !f.name.startsWith('META-INF'));
-            if (!xmlFile) throw new Error('未找到XML');
-            const parsed = parseMusicXML(await xmlFile.async('string'));
-            applyParsedSong({ name: file.name.replace(/\.mxl$/i, ''), data: parsed.notes, bpm: parsed.bpm }, file.name);
-        } else if (ext === 'mid' || ext === 'midi') {
-            showParseModal('解析MIDI...', file.name, 50);
-            applyParsedSong(parseSheetFile(file, await file.arrayBuffer()), file.name);
-        } else {
-            showParseModal('解析文本曲谱...', file.name, 50);
-            applyParsedSong(parseSheetFile(file, await file.text()), file.name);
+        let lastParsed = null;
+        for (let index = 0; index < files.length; index++) {
+            const file = files[index];
+            showParseModal(
+                files.length > 1 ? `解析曲谱 ${index + 1}/${files.length}...` : '解析曲谱...',
+                file.name,
+                Math.round((index / files.length) * 80) + 10
+            );
+            lastParsed = { song: await parseUploadFile(file), fileName: file.name };
+            await saveToLibrary(normalizeSongData(lastParsed.song), file.name);
+        }
+
+        if (lastParsed) {
+            const sheets = await getAllSheets();
+            libraryCache = sheets;
+            const newestSheet = sheets[0];
+            if (newestSheet) {
+                applyParsedSong(newestSheet, newestSheet.fileName || newestSheet.name, {
+                    saveToLibrary: false,
+                    libraryId: newestSheet.id,
+                    delayMs: 0
+                });
+            }
         }
     } catch (err) {
         hideParseModal();
         alert('❌ 解析失败: ' + err.message);
+    } finally {
         uploadInput.value = '';
+        updatePlaylistUI();
     }
 });
 

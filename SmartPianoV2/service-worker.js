@@ -4,7 +4,7 @@
  * 实现"二次秒开"，甚至在断网环境下也能正常使用
  */
 
-const CACHE_NAME = 'smart-piano-v2-cache-v1';
+const CACHE_NAME = 'smart-piano-v2-cache-v6';
 
 // 需要预缓存的资源
 const PRECACHE_URLS = [
@@ -16,6 +16,8 @@ const PRECACHE_URLS = [
     '/parser.js',
     '/noteMap.js',
     '/sheetLibrary.js',
+    '/manifest.json',
+    '/icon.svg',
     'https://cdn.tailwindcss.com',
     'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
     'https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js'

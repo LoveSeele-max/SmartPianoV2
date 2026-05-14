@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Piano V2 - DAW UI</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#111113">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=20260514-playlist-render-fix"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -304,10 +307,11 @@
                 <div class="flex gap-2" style="flex:1; min-height:0;">
 
                     <!-- Add Sheet button -->
-                    <label class="add-btn">
+                    <label class="add-btn" id="add-sheet-label" for="upload-sheet">
                         <span class="plus">+</span>
                         <span>Add Sheet /<br>Import MIDI</span>
-                        <input type="file" id="upload-sheet" class="hidden" accept=".xml,.mxl,.mid,.midi,.json">
+                        <input type="file" id="upload-sheet" accept=".xml,.mxl,.mid,.midi,.json" multiple
+                               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
                     </label>
 
                     <!-- Table -->
@@ -386,7 +390,14 @@
     </div>
 
     <script>
-        if ('serviceWorker' in navigator) {
+        const isLocalDev = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+        if (isLocalDev && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations()
+                .then(registrations => registrations.forEach(registration => registration.unregister()));
+            if ('caches' in window) {
+                caches.keys().then(keys => keys.forEach(key => caches.delete(key)));
+            }
+        } else if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./service-worker.js')
                     .then(r => console.log('[SW] 注册成功:', r.scope))

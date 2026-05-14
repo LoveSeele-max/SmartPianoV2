@@ -46,8 +46,14 @@ export async function saveToLibrary(songData, fileName) {
 
     return new Promise((resolve, reject) => {
         const request = store.add(record);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            db.close();
+            resolve(request.result);
+        };
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
     });
 }
 
@@ -68,10 +74,14 @@ export async function getAllSheets() {
                 results.push(cursor.value);
                 cursor.continue();
             } else {
+                db.close();
                 resolve(results);
             }
         };
-        request.onerror = () => reject(request.error);
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
     });
 }
 
@@ -83,8 +93,14 @@ export async function getSheetById(id) {
 
     return new Promise((resolve, reject) => {
         const request = store.get(id);
-        request.onsuccess = () => resolve(request.value);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            db.close();
+            resolve(request.value);
+        };
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
     });
 }
 
@@ -96,8 +112,14 @@ export async function deleteFromLibrary(id) {
 
     return new Promise((resolve, reject) => {
         const request = store.delete(id);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            db.close();
+            resolve();
+        };
+        request.onerror = () => {
+            db.close();
+            reject(request.error);
+        };
     });
 }
 
@@ -109,7 +131,13 @@ export async function getLibraryStats() {
 
     return new Promise((resolve, reject) => {
         const countRequest = store.count();
-        countRequest.onsuccess = () => resolve(countRequest.result);
-        countRequest.onerror = () => reject(countRequest.error);
+        countRequest.onsuccess = () => {
+            db.close();
+            resolve(countRequest.result);
+        };
+        countRequest.onerror = () => {
+            db.close();
+            reject(countRequest.error);
+        };
     });
 }
