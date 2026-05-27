@@ -102,6 +102,7 @@ const btnPlayPause = document.getElementById('btn-play-pause');
 const btnReset = document.getElementById('btn-reset');
 const btnAuto = document.getElementById('mode-auto');
 const btnWait = document.getElementById('mode-wait');
+const btnWaterfall = document.getElementById('mode-waterfall');
 const modeSlider = document.getElementById('mode-slider');
 const modeSelectNative = document.getElementById('mode-select-native');
 const metronomeToggle = document.getElementById('metronome-toggle');
@@ -118,6 +119,22 @@ const btnSkipForward = document.getElementById('btn-skip-forward');
 const bpmUI = document.getElementById('bpm-ui');
 const midiDot = document.getElementById('midi-dot');
 const midiStatusText = document.getElementById('midi-status-text');
+
+function isAutoPlaybackMode() {
+    return currentMode === 'auto' || currentMode === 'waterfall';
+}
+
+function getReadyMessage() {
+    if (currentMode === 'wait') return '练习模式就绪，点击播放。';
+    if (currentMode === 'waterfall') return '瀑布模式就绪，音符会从上方落到琴键线。';
+    return '自动播放引擎就绪。';
+}
+
+function getRunningMessage() {
+    if (currentMode === 'wait') return '练习模式：请弹奏到达青色激光线的琥珀色音符。';
+    if (currentMode === 'waterfall') return '瀑布模式播放中：音符从上方落下。';
+    return '自动播放中...';
+}
 
 // ==================== UI 渲染 ====================
 
@@ -165,9 +182,257 @@ function drawCapsule(ctx, x, y, width, height) {
     ctx.arc(x + radius, y + radius, radius, Math.PI / 2, -Math.PI / 2);
 }
 
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+function getWaterfallKeyLayout(canvasWidth) {
+    const canvasRect = sheetCanvas.getBoundingClientRect();
+    const keys = new Map();
+    let trackLeft = Infinity;
+    let trackRight = -Infinity;
+
+    for (let midi = 36; midi <= 96; midi++) {
+        const keyElement = document.getElementById(`key-${midi}`);
+        const note = lookupByMidi(midi);
+        if (!keyElement || !note) continue;
+
+        const rect = keyElement.getBoundingClientRect();
+        const left = rect.left - canvasRect.left;
+        const right = rect.right - canvasRect.left;
+        const center = left + rect.width / 2;
+
+        keys.set(midi, {
+            left,
+            right,
+            center,
+            width: rect.width,
+            note,
+            isBlack: note.type === 'black'
+        });
+
+        trackLeft = Math.min(trackLeft, left);
+        trackRight = Math.max(trackRight, right);
+    }
+
+    if (!Number.isFinite(trackLeft) || !Number.isFinite(trackRight)) {
+        return {
+            keys,
+            trackLeft: 24,
+            trackRight: Math.max(24, canvasWidth - 24),
+            trackW: Math.max(1, canvasWidth - 48)
+        };
+    }
+
+    const clampedLeft = Math.max(0, Math.min(canvasWidth, trackLeft));
+    const clampedRight = Math.max(0, Math.min(canvasWidth, trackRight));
+
+    return {
+        keys,
+        trackLeft: clampedLeft,
+        trackRight: clampedRight,
+        trackW: Math.max(1, clampedRight - clampedLeft)
+    };
+}
+
+function drawWaterfallSheet(beatPosition) {
+    if (!canvasCtx || !sheetCanvas) return;
+
+    const ctx = canvasCtx;
+    const { width: w, height: h } = resizeSheetCanvas();
+    const keyLayout = getWaterfallKeyLayout(w);
+    const { keys: keyPositions, trackLeft, trackRight, trackW } = keyLayout;
+    const topPad = 18;
+    const hitLineY = Math.max(128, h - 42);
+    const pixelsPerBeat = Math.max(54, Math.min(96, (hitLineY - topPad) / 4.8));
+    const visibleFutureBeats = (hitLineY - topPad) / pixelsPerBeat;
+    const visiblePastBeats = (h - hitLineY + 80) / pixelsPerBeat;
+
+    ctx.save();
+    ctx.fillStyle = isPlaying ? 'rgba(7, 10, 18, 0.38)' : '#070a12';
+    ctx.fillRect(0, 0, w, h);
+
+    const bg = ctx.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, 'rgba(8, 13, 24, 0.98)');
+    bg.addColorStop(0.58, 'rgba(12, 21, 32, 0.95)');
+    bg.addColorStop(1, 'rgba(4, 8, 12, 0.98)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    keyPositions.forEach((key, midi) => {
+        const isOctave = midi % 12 === 0;
+
+        ctx.fillStyle = key.isBlack ? 'rgba(15, 23, 42, 0.66)' : 'rgba(30, 41, 59, 0.26)';
+        ctx.fillRect(key.left, topPad, key.width, h - topPad);
+
+        ctx.strokeStyle = isOctave ? 'rgba(34, 211, 238, 0.26)' : 'rgba(148, 163, 184, 0.08)';
+        ctx.lineWidth = isOctave ? 1 : 0.5;
+        ctx.beginPath();
+        ctx.moveTo(key.left + 0.5, topPad);
+        ctx.lineTo(key.left + 0.5, h);
+        ctx.stroke();
+
+        if (isOctave && key.width > 8) {
+            ctx.fillStyle = 'rgba(226, 232, 240, 0.56)';
+            ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(key.note.name, key.center, 9);
+        }
+    });
+
+    const startBeat = Math.floor(beatPosition - visiblePastBeats) - 1;
+    const endBeat = Math.ceil(beatPosition + visibleFutureBeats) + 1;
+    for (let b = Math.max(0, startBeat); b <= Math.min(globalTotalBeats, endBeat); b++) {
+        const y = hitLineY - (b - beatPosition) * pixelsPerBeat;
+        if (y < topPad || y > h) continue;
+
+        const isMeasure = b % 4 === 0;
+        ctx.strokeStyle = isMeasure ? 'rgba(34, 211, 238, 0.28)' : 'rgba(255, 255, 255, 0.07)';
+        ctx.lineWidth = isMeasure ? 1.2 : 0.5;
+        ctx.beginPath();
+        ctx.moveTo(trackLeft, y);
+        ctx.lineTo(trackRight, y);
+        ctx.stroke();
+
+        if (isMeasure) {
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.70)';
+            ctx.font = 'bold 10px ui-monospace, SFMono-Regular, Menlo, monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`M${Math.floor(b / 4) + 1}`, trackLeft + 6, y - 8);
+        }
+    }
+
+    const targetGlow = ctx.createLinearGradient(0, hitLineY - 24, 0, hitLineY + 24);
+    targetGlow.addColorStop(0, 'rgba(34, 211, 238, 0)');
+    targetGlow.addColorStop(0.5, 'rgba(34, 211, 238, 0.20)');
+    targetGlow.addColorStop(1, 'rgba(34, 211, 238, 0)');
+    ctx.fillStyle = targetGlow;
+    ctx.fillRect(trackLeft, hitLineY - 24, trackW, 48);
+
+    currentSongInfo.data.forEach((item) => {
+        const key = keyPositions.get(item.midi);
+        if (!key) return;
+
+        const noteBottom = hitLineY - (item.startTimeBeat - beatPosition) * pixelsPerBeat;
+        const noteH = Math.max(item.durationBeat * pixelsPerBeat, 18);
+        const noteTop = noteBottom - noteH;
+        if (noteBottom < topPad - 36 || noteTop > h + 80) return;
+
+        const noteW = Math.max(6, key.width * (key.isBlack ? 0.76 : 0.72));
+        const x = key.center - noteW / 2;
+        const clippedTop = Math.max(noteTop, topPad - 6);
+        const clippedBottom = Math.min(noteBottom, h + 24);
+        const clippedH = Math.max(4, clippedBottom - clippedTop);
+        const isActive = beatPosition >= item.startTimeBeat - 0.001 &&
+            beatPosition <= item.startTimeBeat + item.durationBeat + 0.03;
+        const isPlayed = item.played && !isActive;
+
+        let fillTop = 'rgba(34, 211, 238, 0.22)';
+        let fillBottom = 'rgba(34, 211, 238, 0.95)';
+        let edge = '#67e8f9';
+        let shadow = '#22d3ee';
+        let alpha = 0.88;
+        let blur = 12;
+
+        if (isActive) {
+            fillTop = 'rgba(74, 222, 128, 0.34)';
+            fillBottom = 'rgba(103, 232, 249, 1)';
+            edge = '#ecfeff';
+            shadow = '#67e8f9';
+            alpha = 1;
+            blur = 26;
+        } else if (isPlayed) {
+            fillTop = 'rgba(63, 63, 70, 0.25)';
+            fillBottom = 'rgba(82, 82, 91, 0.55)';
+            edge = 'rgba(113, 113, 122, 0.52)';
+            shadow = 'rgba(82, 82, 91, 0)';
+            alpha = 0.45;
+            blur = 0;
+        }
+
+        const fill = ctx.createLinearGradient(0, clippedTop, 0, clippedBottom);
+        fill.addColorStop(0, fillTop);
+        fill.addColorStop(1, fillBottom);
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = 1;
+        ctx.shadowColor = shadow;
+        ctx.shadowBlur = blur;
+        ctx.beginPath();
+        drawRoundedRect(ctx, x, clippedTop, noteW, clippedH, Math.min(8, noteW / 2));
+        ctx.fill();
+        ctx.stroke();
+
+        if (!isPlayed && noteW > 8) {
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = Math.min(alpha, 0.55);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.46)';
+            ctx.beginPath();
+            drawRoundedRect(ctx, x + Math.max(2, noteW * 0.18), clippedTop + 4, Math.max(2, noteW * 0.18), Math.max(4, clippedH - 8), 3);
+            ctx.fill();
+        }
+
+        ctx.restore();
+
+        if (noteW > 16 && clippedH > 30) {
+            ctx.save();
+            ctx.fillStyle = isPlayed ? 'rgba(226, 232, 240, 0.48)' : '#082f49';
+            ctx.font = 'bold 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(item.note, x + noteW / 2, Math.max(clippedTop + 14, clippedBottom - 14));
+            ctx.restore();
+        }
+    });
+
+    ctx.strokeStyle = 'rgba(236, 254, 255, 0.92)';
+    ctx.lineWidth = 2.4;
+    ctx.shadowColor = '#22d3ee';
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.moveTo(trackLeft, hitLineY);
+    ctx.lineTo(trackRight, hitLineY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.68)';
+    ctx.fillRect(trackLeft, hitLineY + 2, trackW, Math.max(0, h - hitLineY - 2));
+    ctx.strokeStyle = 'rgba(34, 211, 238, 0.18)';
+    ctx.strokeRect(trackLeft + 0.5, hitLineY + 2.5, trackW - 1, Math.max(0, h - hitLineY - 3));
+
+    keyPositions.forEach((key, midi) => {
+        if (midi % 12 !== 0 || key.width <= 13) return;
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.50)';
+        ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(key.note.name, key.center, hitLineY + 21);
+    });
+
+    ctx.restore();
+}
+
 /** Canvas 绘制卷帘窗 */
 function drawSheet(beatPosition) {
     if (!canvasCtx || !sheetCanvas) return;
+    if (currentMode === 'waterfall') {
+        drawWaterfallSheet(beatPosition);
+        return;
+    }
 
     const ctx = canvasCtx;
     const { width: w, height: h } = resizeSheetCanvas();
@@ -544,12 +809,12 @@ async function togglePlayPause() {
         const sessionId = ++playbackSessionId;
         btnPlayPause.innerText = '暂停';
         setPlayButtonAppearance('playing');
-        instructionText.innerText = currentMode === 'auto' ? '自动播放中...' : '练习模式：请弹奏到达青色激光线的琥珀色音符。';
+        instructionText.innerText = getRunningMessage();
         await audioEngine.init();
 
         if (!isPlaying || isPaused || sessionId !== playbackSessionId) return;
 
-        if (currentMode === 'auto') {
+        if (isAutoPlaybackMode()) {
             playStartTime = performance.now() - (currentBeat * msPerBeat);
             animationId = requestAnimationFrame(() => playLoop(sessionId));
         } else {
@@ -568,8 +833,8 @@ async function startPractice() {
 
     if (!isPlaying || isPaused || sessionId !== playbackSessionId) return;
 
-    if (currentMode === 'auto') {
-        instructionText.innerText = '自动播放中...';
+    if (isAutoPlaybackMode()) {
+        instructionText.innerText = getRunningMessage();
         playStartTime = performance.now() - (currentBeat * msPerBeat);
         animationId = requestAnimationFrame(() => playLoop(sessionId));
     } else {
@@ -662,7 +927,7 @@ function resetPractice() {
     if (currentMode === 'metro') {
         instructionText.innerText = '节拍器就绪，点击播放。';
     } else {
-        instructionText.innerText = currentMode === 'wait' ? '练习模式就绪，点击播放。' : '自动播放引擎就绪。';
+        instructionText.innerText = getReadyMessage();
     }
 }
 
@@ -783,24 +1048,36 @@ function setMode(mode) {
     currentMode = mode;
     if (modeSelectNative && modeSelectNative.value !== mode) modeSelectNative.value = mode;
 
+    btnAuto.classList.toggle('text-white', currentMode === 'auto');
+    btnAuto.classList.toggle('text-slate-400', currentMode !== 'auto');
+    btnWait.classList.toggle('text-white', currentMode === 'wait');
+    btnWait.classList.toggle('text-slate-400', currentMode !== 'wait');
+    if (btnWaterfall) {
+        btnWaterfall.classList.toggle('text-white', currentMode === 'waterfall');
+        btnWaterfall.classList.toggle('text-slate-400', currentMode !== 'waterfall');
+        btnWaterfall.classList.toggle('active', currentMode === 'waterfall');
+    }
+
     if (currentMode === 'auto') {
-        btnAuto.classList.replace('text-slate-400', 'text-white');
-        btnWait.classList.replace('text-white', 'text-slate-400');
         modeSlider.style.transform = 'translateX(0)';
         setMetronomeToggle(false);
         instructionText.innerText = '已切换至自动播放模式。';
     } else if (currentMode === 'wait') {
-        btnWait.classList.replace('text-slate-400', 'text-white');
-        btnAuto.classList.replace('text-white', 'text-slate-400');
         modeSlider.style.transform = 'translateX(100%)';
         setMetronomeToggle(false);
         instructionText.innerText = '已切换至练习模式：你需要弹对琥珀色高亮琴键，谱面才会前进。';
+    } else if (currentMode === 'waterfall') {
+        modeSlider.style.transform = 'translateX(200%)';
+        setMetronomeToggle(false);
+        instructionText.innerText = '已切换至瀑布模式：音符会从上方落到琴键线。';
     } else {
         setMetronomeToggle(false);
         btnPlayPause.innerText = '播放';
         setPlayButtonAppearance('ready');
         instructionText.innerText = '已切换至节拍器模式。';
     }
+
+    drawSheet(currentBeat);
 }
 
 // ==================== 文件解析与加载 ====================
@@ -1092,6 +1369,9 @@ btnPlayPause.addEventListener('click', togglePlayPause);
 btnReset.addEventListener('click', resetPractice);
 btnAuto.addEventListener('click', () => setMode('auto'));
 btnWait.addEventListener('click', () => setMode('wait'));
+if (btnWaterfall) {
+    btnWaterfall.addEventListener('click', () => setMode('waterfall'));
+}
 if (modeSelectNative) {
     modeSelectNative.addEventListener('change', (e) => setMode(e.target.value));
 }
@@ -1203,6 +1483,12 @@ window.addEventListener('resize', () => {
 });
 
 // ==================== 初始化 ====================
+
+if (keyboardContainer && keyboardContainer.parentElement) {
+    keyboardContainer.parentElement.addEventListener('scroll', () => {
+        if (sheetCanvas) drawSheet(currentBeat);
+    }, { passive: true });
+}
 
 export function init() {
     renderSheet();

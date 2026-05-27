@@ -4,7 +4,7 @@
  * 实现"二次秒开"，甚至在断网环境下也能正常使用
  */
 
-const CACHE_NAME = 'smart-piano-v2-cache-v6';
+const CACHE_NAME = 'smart-piano-v2-cache-v8';
 
 // 需要预缓存的资源
 const PRECACHE_URLS = [

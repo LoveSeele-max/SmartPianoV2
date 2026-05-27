@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260514-playlist-render-fix"></script>
+    <script type="module" src="app.js?v=20260527-waterfall-key-align"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -53,6 +53,28 @@
             transition: border-color 0.15s;
         }
         .ctrl-select:focus { outline: none; border-color: #22d3ee; }
+
+        .mode-quick-btn {
+            margin-top: 0.35rem;
+            width: 100%;
+            height: 24px;
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 0.35rem;
+            color: #a1a1aa;
+            cursor: pointer;
+            font-size: 0.68rem;
+            font-weight: 700;
+            line-height: 1;
+            transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+        }
+        .mode-quick-btn:hover,
+        .mode-quick-btn.active {
+            background: rgba(34, 211, 238, 0.12);
+            border-color: #22d3ee;
+            color: #ecfeff;
+            box-shadow: 0 0 12px rgba(34, 211, 238, 0.18);
+        }
 
         .ctrl-number {
             background: #09090b;
@@ -260,8 +282,10 @@
                     <select id="mode-select-native" class="ctrl-select">
                         <option value="auto">Play</option>
                         <option value="wait">Practice</option>
+                        <option value="waterfall">Waterfall</option>
                         <option value="metro">Metronome</option>
                     </select>
+                    <button id="mode-waterfall" class="mode-quick-btn" type="button" title="Waterfall falling-note mode">Waterfall</button>
                     <!-- app.js compat -->
                     <button id="mode-auto" class="hidden"></button>
                     <button id="mode-wait" class="hidden"></button>
