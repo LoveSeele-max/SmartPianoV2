@@ -10,6 +10,7 @@ export class AudioEngine {
         this.audioCtx = null;
         this.pianoInstrument = null;
         this.activeAudioNodes = {};
+        this.activeMetronomeNodes = new Set();
         this.masterGain = null;
         this.outputBoostGain = null;
         this.masterCompressor = null;
@@ -88,6 +89,12 @@ export class AudioEngine {
         gain.gain.exponentialRampToValueAtTime(accent ? 0.18 : 0.11, now + 0.006);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
 
+        const metronomeNode = { osc, gain };
+        this.activeMetronomeNodes.add(metronomeNode);
+        osc.onended = () => {
+            this.activeMetronomeNodes.delete(metronomeNode);
+        };
+
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start(now);
@@ -155,6 +162,13 @@ export class AudioEngine {
             } catch (e) { /* 忽略 */ }
         });
         this.activeAudioNodes = {};
+
+        this.activeMetronomeNodes.forEach(({ osc }) => {
+            try {
+                osc.stop();
+            } catch (e) { /* 忽略 */ }
+        });
+        this.activeMetronomeNodes.clear();
     }
 
     /** 设置主音量 (0-1) */

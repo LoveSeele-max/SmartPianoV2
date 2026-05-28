@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260528-output-boost-60';
+import { AudioEngine } from './audioEngine.js?v=20260528-playback-fixes';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -129,6 +129,25 @@ function updateVolumeDisplay(value) {
     if (!volumeValueUI) return;
     const normalizedVolume = Math.max(0, Math.min(1, parseFloat(value) || 0));
     volumeValueUI.textContent = `${Math.round(normalizedVolume * 100)}%`;
+}
+
+function normalizeLibraryId(id) {
+    const numericId = Number(id);
+    return Number.isInteger(numericId) && numericId > 0 ? numericId : null;
+}
+
+function resetPlaybackProgress(redraw = true) {
+    currentBeat = 0;
+    progressSlider.value = 0;
+    currentWaitIndex = 0;
+    practiceCurrentBeat = 0;
+    currentSongInfo.data.forEach(note => note.played = false);
+    if (redraw) drawSheet(0);
+}
+
+function isPlaybackComplete() {
+    return currentBeat >= globalTotalBeats - 0.001 ||
+        (currentSongInfo.data.length > 0 && currentSongInfo.data.every(note => note.played));
 }
 
 function getReadyMessage() {
@@ -748,7 +767,9 @@ function setPlayButtonAppearance(state) {
 }
 
 function setMetronomeToggle(active) {
-    if (metronomeToggle) metronomeToggle.classList.toggle('on', active);
+    if (!metronomeToggle) return;
+    metronomeToggle.classList.toggle('on', active);
+    metronomeToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
 }
 
 function stopActivePlayback() {
@@ -772,10 +793,11 @@ function stopMetronome(message = '节拍器已停止。') {
     btnPlayPause.innerText = '播放';
     setPlayButtonAppearance('ready');
     instructionText.innerText = message;
+    updatePlaylistUI();
 }
 
 async function startMetronome() {
-    if (metronomeTimerId) stopMetronome();
+    if (metronomeTimerId) stopActivePlayback();
 
     isPlaying = true;
     isPaused = false;
@@ -783,9 +805,11 @@ async function startMetronome() {
     setPlayButtonAppearance('playing');
     setMetronomeToggle(true);
     instructionText.innerText = `节拍器运行中：${bpm} BPM`;
+    updatePlaylistUI();
 
     const tick = () => {
-        audioEngine.playMetronomeTick(metronomeBeatIndex % 4 === 0);
+        audioEngine.playMetronomeTick(metronomeBeatIndex % 4 === 0)
+            .catch(err => console.warn('节拍器播放失败:', err));
         metronomeBeatIndex++;
     };
 
@@ -815,6 +839,7 @@ async function togglePlayPause() {
         btnPlayPause.innerText = '继续';
         setPlayButtonAppearance('ready');
         instructionText.innerText = '已暂停';
+        updatePlaylistUI();
     } else if (!isPlaying && isPaused) {
                 // 继续
         isPlaying = true;
@@ -823,6 +848,7 @@ async function togglePlayPause() {
         btnPlayPause.innerText = '暂停';
         setPlayButtonAppearance('playing');
         instructionText.innerText = getRunningMessage();
+        updatePlaylistUI();
         await audioEngine.init();
 
         if (!isPlaying || isPaused || sessionId !== playbackSessionId) return;
@@ -837,11 +863,16 @@ async function togglePlayPause() {
 }
 
 async function startPractice() {
+    if (isPlaybackComplete()) {
+        resetPlaybackProgress(false);
+    }
+
     isPlaying = true;
     isPaused = false;
     const sessionId = ++playbackSessionId;
     btnPlayPause.innerText = '暂停';
     setPlayButtonAppearance('playing');
+    updatePlaylistUI();
     await audioEngine.init();
 
     if (!isPlaying || isPaused || sessionId !== playbackSessionId) return;
@@ -918,23 +949,21 @@ function finishPlaying(sessionId = playbackSessionId) {
     isPaused = false;
     playbackSessionId++;
         cancelAnimationFrame(animationId);
+    animationId = null;
     audioEngine.stopAllNotes();
+    currentBeat = globalTotalBeats;
+    progressSlider.value = currentBeat;
+    drawSheet(currentBeat);
     instructionText.innerText = '太棒了！曲目播放完成。';
     btnPlayPause.innerText = '重新播放';
     setPlayButtonAppearance('ready');
+    updatePlaylistUI();
 }
 
 function resetPractice() {
     stopActivePlayback();
     audioEngine.stopAllNotes();
-
-    currentBeat = 0;
-    progressSlider.value = 0;
-
-    currentSongInfo.data.forEach(note => note.played = false);
-
-        // 重新绘制 Canvas
-    drawSheet(0);
+    resetPlaybackProgress();
 
     btnPlayPause.innerText = '播放';
     setPlayButtonAppearance('ready');
@@ -943,6 +972,18 @@ function resetPractice() {
     } else {
         instructionText.innerText = getReadyMessage();
     }
+    updatePlaylistUI();
+}
+
+function stopFromPlaylist(sheetId) {
+    if (sheetId !== currentSheetId && !isPlaying && !isPaused) {
+        instructionText.innerText = '这首曲谱当前没有播放。';
+        return;
+    }
+
+    resetPractice();
+    instructionText.innerText = '已停止播放并回到开头。';
+    updatePlaylistUI();
 }
 
 function seekToBeat(targetBeat) {
@@ -1143,9 +1184,7 @@ function loadDemoSong(message = '曲谱库已清空，已回到内置示例曲�
 }
 
 function applyParsedSong(songData, fileName, options = {}) {
-    const isLibraryRecord = options.libraryId !== undefined || songData.id !== undefined;
-    const shouldSaveToLibrary = options.saveToLibrary === true ||
-        (options.saveToLibrary !== false && !isLibraryRecord);
+    const shouldSaveToLibrary = options.saveToLibrary === true;
     const delayMs = options.delayMs ?? (shouldSaveToLibrary ? 500 : 0);
     const autoPlay = options.autoPlay === true;
     const loadRequestId = ++songLoadRequestId;
@@ -1167,7 +1206,7 @@ function applyParsedSong(songData, fileName, options = {}) {
 
         hideParseModal();
         currentSongInfo = normalizedSong;
-        currentSheetId = options.libraryId ?? normalizedSong.id ?? null;
+        currentSheetId = normalizeLibraryId(options.libraryId ?? normalizedSong.id);
 
         let displayName = normalizedSong.name || fileName.split('.').slice(0, -1).join('.');
         if (!displayName.startsWith('《')) displayName = '《' + displayName;
@@ -1182,7 +1221,7 @@ function applyParsedSong(songData, fileName, options = {}) {
         if (shouldSaveToLibrary) {
             // 自动保存到本地库
             saveToLibrary(normalizedSong, fileName).then((savedId) => {
-                if (loadRequestId === songLoadRequestId) currentSheetId = savedId;
+                if (loadRequestId === songLoadRequestId) currentSheetId = normalizeLibraryId(savedId);
                 updatePlaylistUI();
             }).catch(err => {
                 console.warn('保存到本地库失败:', err);
@@ -1253,21 +1292,29 @@ async function updatePlaylistUI() {
             return;
         }
 
-        const displayIds = new Map([...sheets].reverse().map((sheet, index) => [sheet.id, index + 1]));
+        const displayIds = new Map(
+            [...sheets].reverse()
+                .map((sheet, index) => [normalizeLibraryId(sheet.id), index + 1])
+                .filter(([sheetId]) => sheetId !== null)
+        );
         const countEl = document.getElementById('playlist-count');
         if (countEl) countEl.textContent = `${sheets.length} 首`;
 
         sheets.forEach(sheet => {
+            const sheetId = normalizeLibraryId(sheet.id);
+            if (sheetId === null) return;
+
             const ext = (sheet.fileName || sheet.name || '').split('.').pop()?.toUpperCase() || 'SHEET';
-            const isLoaded = sheet.id === currentSheetId;
-            const statusClass = isLoaded ? 's-playing' : 's-ready';
-            const statusText = isLoaded ? 'Playing' : 'Ready';
+            const isLoaded = sheetId === currentSheetId;
+            const isRunning = isLoaded && (isPlaying || isPaused);
+            const statusClass = isRunning ? 's-playing' : isLoaded ? 's-learning' : 's-ready';
+            const statusText = isRunning ? (isPaused ? 'Paused' : 'Playing') : isLoaded ? 'Loaded' : 'Ready';
 
             const row = document.createElement('tr');
-            row.addEventListener('click', () => window.loadSheetFromLibrary(sheet.id));
+            row.addEventListener('click', () => window.loadSheetFromLibrary(sheetId));
 
             const idCell = document.createElement('td');
-            idCell.textContent = displayIds.get(sheet.id) || sheet.id;
+            idCell.textContent = displayIds.get(sheetId) || sheetId;
 
             const titleCell = document.createElement('td');
             titleCell.className = 'title-cell';
@@ -1286,24 +1333,27 @@ async function updatePlaylistUI() {
             actionsCell.style.textAlign = 'right';
 
             const playBtn = document.createElement('button');
+            playBtn.type = 'button';
             playBtn.className = 'act-btn';
             playBtn.title = '播放';
             playBtn.textContent = '▶';
             playBtn.addEventListener('click', (event) => {
                 event.stopPropagation();
-                window.loadSheetFromLibrary(sheet.id, { autoPlay: true });
+                window.loadSheetFromLibrary(sheetId, { autoPlay: true });
             });
 
             const stopBtn = document.createElement('button');
+            stopBtn.type = 'button';
             stopBtn.className = 'act-btn';
             stopBtn.title = '停止';
             stopBtn.textContent = '■';
             stopBtn.addEventListener('click', (event) => {
                 event.stopPropagation();
-                resetPractice();
+                stopFromPlaylist(sheetId);
             });
 
             const editBtn = document.createElement('button');
+            editBtn.type = 'button';
             editBtn.className = 'act-btn';
             editBtn.title = '编辑';
             editBtn.textContent = '✎';
@@ -1313,12 +1363,13 @@ async function updatePlaylistUI() {
             });
 
             const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
             deleteBtn.className = 'act-btn del';
             deleteBtn.title = '删除';
             deleteBtn.textContent = '🗑';
             deleteBtn.addEventListener('click', (event) => {
                 event.stopPropagation();
-                window.deleteSheetFromLibrary(sheet.id);
+                window.deleteSheetFromLibrary(sheetId);
             });
 
             actionsCell.append(playBtn, stopBtn, editBtn, deleteBtn);
@@ -1335,12 +1386,14 @@ async function updatePlaylistUI() {
 /** 从本地库加载曲谱 */
 window.loadSheetFromLibrary = async function(id, options = {}) {
     try {
-        if (!Number.isFinite(id)) return;
-        const sheet = libraryCache.find(item => item.id === id) || await getSheetById(id);
+        const sheetId = normalizeLibraryId(id);
+        if (sheetId === null) return;
+
+        const sheet = libraryCache.find(item => normalizeLibraryId(item.id) === sheetId) || await getSheetById(sheetId);
         if (sheet) {
             applyParsedSong(sheet, sheet.fileName || sheet.name, {
                 saveToLibrary: false,
-                libraryId: id,
+                libraryId: sheetId,
                 autoPlay: options.autoPlay === true,
                 delayMs: 0
             });
@@ -1353,8 +1406,11 @@ window.loadSheetFromLibrary = async function(id, options = {}) {
 /** 从本地库删除曲谱 */
 window.deleteSheetFromLibrary = async function(id) {
     try {
-        const wasCurrentSheet = id === currentSheetId;
-        await deleteFromLibrary(id);
+        const sheetId = normalizeLibraryId(id);
+        if (sheetId === null) return;
+
+        const wasCurrentSheet = sheetId === currentSheetId;
+        await deleteFromLibrary(sheetId);
         const remainingSheets = await getAllSheets();
 
         if (remainingSheets.length === 0) {
@@ -1392,12 +1448,12 @@ if (modeSelectNative) {
     modeSelectNative.addEventListener('change', (e) => setMode(e.target.value));
 }
 if (metronomeToggle) {
-    metronomeToggle.addEventListener('click', () => {
+    metronomeToggle.addEventListener('click', async () => {
         if (currentMode !== 'metro') setMode('metro');
         if (isPlaying) {
             stopMetronome();
         } else {
-            startMetronome();
+            await startMetronome();
         }
     });
 }
@@ -1419,7 +1475,8 @@ bpmUI.addEventListener('change', (e) => {
         if (currentMode === 'metro' && metronomeTimerId) {
             clearInterval(metronomeTimerId);
             metronomeTimerId = setInterval(() => {
-                audioEngine.playMetronomeTick(metronomeBeatIndex % 4 === 0);
+                audioEngine.playMetronomeTick(metronomeBeatIndex % 4 === 0)
+                    .catch(err => console.warn('节拍器播放失败:', err));
                 metronomeBeatIndex++;
             }, msPerBeat);
             instructionText.innerText = `节拍器运行中：${bpm} BPM`;

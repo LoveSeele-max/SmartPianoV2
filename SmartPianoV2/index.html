@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260528-output-boost-60"></script>
+    <script type="module" src="app.js?v=20260528-playback-fixes"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -110,6 +110,8 @@
         .tog-track {
             width: 34px; height: 18px;
             background: #3f3f46;
+            border: 0;
+            padding: 0;
             border-radius: 999px;
             position: relative;
             cursor: pointer;
@@ -335,9 +337,9 @@
                 <div class="flex flex-col justify-end h-full">
                     <span class="ctrl-label">Metronome</span>
                     <div class="flex items-center" style="height:28px;">
-                        <div class="tog-track" id="metronome-toggle">
+                        <button type="button" class="tog-track" id="metronome-toggle" aria-label="Metronome" aria-pressed="false">
                             <div class="tog-thumb"></div>
-                        </div>
+                        </button>
                     </div>
                 </div>
 
