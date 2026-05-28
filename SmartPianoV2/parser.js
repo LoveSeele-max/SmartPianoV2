@@ -62,6 +62,10 @@ export function parseMusicXML(xmlText) {
         const step = pitchEl.querySelector(':scope > step')?.textContent || 'C';
         const octave = parseInt(pitchEl.querySelector(':scope > octave')?.textContent || '4');
         const alter = parseInt(pitchEl.querySelector(':scope > alter')?.textContent || '0');
+        const accidental = alter > 0 ? '#'.repeat(alter) : alter < 0 ? 'b'.repeat(Math.abs(alter)) : '';
+        const writtenName = `${step}${accidental}${octave}`;
+        if (getNoteInfo(writtenName)) return writtenName;
+
         const midi = (octave + 1) * 12 + stepToSemitone[step] + alter;
         return lookupByMidi(midi)?.name || null;
     }

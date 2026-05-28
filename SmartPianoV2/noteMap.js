@@ -5,6 +5,7 @@
 
 // 音符名称与中文唱名
 const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const flatNoteNames = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const labels = ['do', '', 're', '', 'mi', 'fa', '', 'sol', '', 'la', '', 'si'];
 
 // 数据存储
@@ -25,6 +26,14 @@ for (let midi = 36; midi <= 96; midi++) {
         label: labels[noteIndex],
         type: isBlack ? 'black' : 'white'
     };
+    const flatName = flatNoteNames[noteIndex] + octave;
+    if (flatName !== name) {
+        noteMap[flatName] = {
+            ...noteMap[name],
+            name: flatName,
+            canonicalName: name
+        };
+    }
     midiToNoteName[midi] = name;
 
     if (!isBlack) whiteKeysToRender.push(name);
@@ -32,7 +41,9 @@ for (let midi = 36; midi <= 96; midi++) {
 
 /** 根据音符名称获取音符信息 */
 export function getNoteInfo(noteName) {
-    return noteMap[noteName] || null;
+    if (!noteName) return null;
+    const normalizedName = String(noteName).trim().replaceAll('♯', '#').replaceAll('♭', 'b');
+    return noteMap[normalizedName] || null;
 }
 
 /** 根据 MIDI 编号查找音符信息 */

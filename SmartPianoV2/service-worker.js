@@ -4,20 +4,20 @@
  * 实现"二次秒开"，甚至在断网环境下也能正常使用
  */
 
-const CACHE_NAME = 'smart-piano-v2-cache-v8';
+const CACHE_NAME = 'smart-piano-v2-cache-v12';
 
 // 需要预缓存的资源
 const PRECACHE_URLS = [
-    '/',
-    '/index.html',
-    '/app.js',
-    '/audioEngine.js',
-    '/midiController.js',
-    '/parser.js',
-    '/noteMap.js',
-    '/sheetLibrary.js',
-    '/manifest.json',
-    '/icon.svg',
+    './',
+    './index.html',
+    './app.js?v=20260528-output-boost-60',
+    './audioEngine.js?v=20260528-output-boost-60',
+    './midiController.js',
+    './parser.js',
+    './noteMap.js',
+    './sheetLibrary.js',
+    './manifest.json',
+    './icon.svg',
     'https://cdn.tailwindcss.com',
     'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
     'https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js'
@@ -114,7 +114,7 @@ self.addEventListener('fetch', (event) => {
                     }
                     // 对于导航请求，返回离线页面
                     if (event.request.mode === 'navigate') {
-                        return caches.match('/index.html');
+                        return caches.match('./index.html');
                     }
                     return new Response('', { status: 408, statusText: 'Offline' });
                 });

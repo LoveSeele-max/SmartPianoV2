@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js';
+import { AudioEngine } from './audioEngine.js?v=20260528-output-boost-60';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -117,11 +117,18 @@ const progressSlider = document.getElementById('progress-slider');
 const btnSkipBackward = document.getElementById('btn-skip-backward');
 const btnSkipForward = document.getElementById('btn-skip-forward');
 const bpmUI = document.getElementById('bpm-ui');
+const volumeValueUI = document.getElementById('volume-value');
 const midiDot = document.getElementById('midi-dot');
 const midiStatusText = document.getElementById('midi-status-text');
 
 function isAutoPlaybackMode() {
     return currentMode === 'auto' || currentMode === 'waterfall';
+}
+
+function updateVolumeDisplay(value) {
+    if (!volumeValueUI) return;
+    const normalizedVolume = Math.max(0, Math.min(1, parseFloat(value) || 0));
+    volumeValueUI.textContent = `${Math.round(normalizedVolume * 100)}%`;
 }
 
 function getReadyMessage() {
@@ -140,7 +147,7 @@ function getRunningMessage() {
 
 /** 使用 Canvas 绘制卷帘窗（替代 DOM 方式） */
 function renderSheet() {
-    sheetContainer.innerHTML = '';
+    sheetContainer.replaceChildren();
 
     // 计算所有音符的时间信息
     let tempBeat = 0;
@@ -650,7 +657,7 @@ function drawSheet(beatPosition) {
 
 /** Pointer Events 驱动的虚拟键盘渲染（修复鼠标滑动卡键问题） */
 function renderKeyboard() {
-    keyboardContainer.innerHTML = '';
+    keyboardContainer.replaceChildren();
     const whiteKeyWidth = 40;
     const blackKeyWidth = 24;
     const blackKeyHeight = '60%';
@@ -667,7 +674,10 @@ function renderKeyboard() {
         const keyDiv = document.createElement('div');
         keyDiv.id = `key-${noteInfo.midi}`;
                 keyDiv.className = 'key-white w-10 h-full mx-[1px] flex items-end justify-center pb-3 text-xs font-bold cursor-pointer shrink-0';
-        keyDiv.innerHTML = `<span class="key-label">${keyName}</span>`;
+        const keyLabel = document.createElement('span');
+        keyLabel.className = 'key-label';
+        keyLabel.textContent = keyName;
+        keyDiv.appendChild(keyLabel);
         keyDiv.style.width = `${whiteKeyWidth}px`;
         keyDiv.dataset.whiteIndex = idx;
 
@@ -705,7 +715,10 @@ function renderKeyboard() {
         keyDiv.style.height = blackKeyHeight;
         keyDiv.style.left = `${left}px`;
                 keyDiv.style.top = '0';
-        keyDiv.innerHTML = `<span class="key-label">${name.replace('#', '♯')}</span>`;
+        const keyLabel = document.createElement('span');
+        keyLabel.className = 'key-label';
+        keyLabel.textContent = name.replace('#', '♯');
+        keyDiv.appendChild(keyLabel);
 
         keyDiv.addEventListener('pointerdown', (e) => { e.stopPropagation(); handleNoteOn(midi); });
         keyDiv.addEventListener('pointerup', (e) => { e.stopPropagation(); handleNoteOff(midi); });
@@ -913,6 +926,7 @@ function finishPlaying(sessionId = playbackSessionId) {
 
 function resetPractice() {
     stopActivePlayback();
+    audioEngine.stopAllNotes();
 
     currentBeat = 0;
     progressSlider.value = 0;
@@ -1129,7 +1143,9 @@ function loadDemoSong(message = '曲谱库已清空，已回到内置示例曲�
 }
 
 function applyParsedSong(songData, fileName, options = {}) {
-    const shouldSaveToLibrary = options.saveToLibrary !== false;
+    const isLibraryRecord = options.libraryId !== undefined || songData.id !== undefined;
+    const shouldSaveToLibrary = options.saveToLibrary === true ||
+        (options.saveToLibrary !== false && !isLibraryRecord);
     const delayMs = options.delayMs ?? (shouldSaveToLibrary ? 500 : 0);
     const autoPlay = options.autoPlay === true;
     const loadRequestId = ++songLoadRequestId;
@@ -1415,6 +1431,7 @@ bpmUI.addEventListener('change', (e) => {
 
 document.getElementById('volume-slider').addEventListener('input', (e) => {
     audioEngine.setVolume(e.target.value);
+    updateVolumeDisplay(e.target.value);
 });
 
 // 文件上传
@@ -1497,7 +1514,11 @@ export function init() {
     setPlayButtonAppearance('ready');
     bpmUI.value = bpm;
     const volumeSlider = document.getElementById('volume-slider');
-    if (volumeSlider) volumeSlider.value = 8;
+    if (volumeSlider) {
+        volumeSlider.value = 1;
+        audioEngine.setVolume(volumeSlider.value);
+        updateVolumeDisplay(volumeSlider.value);
+    }
     midiController.init();
 
     // 初始化播放列表

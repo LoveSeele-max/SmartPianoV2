@@ -3,12 +3,15 @@
  * 专职管理 Web Audio API、Soundfont 加载、压限器及节点生命周期管理
  */
 
+const OUTPUT_BOOST = 6;
+
 export class AudioEngine {
     constructor() {
         this.audioCtx = null;
         this.pianoInstrument = null;
         this.activeAudioNodes = {};
         this.masterGain = null;
+        this.outputBoostGain = null;
         this.masterCompressor = null;
         this.loadingPromise = null;
         this._onStatusChange = null;
@@ -39,11 +42,14 @@ export class AudioEngine {
 
             // 2. 创建主控增益控制器
             this.masterGain = this.audioCtx.createGain();
-            const parsedVolume = parseFloat(document.getElementById('volume-slider')?.value);
-            this.masterGain.gain.value = Number.isFinite(parsedVolume) ? parsedVolume : 8;
+            this.masterGain.gain.value = this._normalizeVolume(document.getElementById('volume-slider')?.value);
 
-            // 3. 硬件连线：音色库 -> 增益 -> 压限器 -> 扬声器
-            this.masterGain.connect(this.masterCompressor);
+            this.outputBoostGain = this.audioCtx.createGain();
+            this.outputBoostGain.gain.value = OUTPUT_BOOST;
+
+            // 3. 硬件连线：音色库 -> 音量 -> 固定增益补偿 -> 压限器 -> 扬声器
+            this.masterGain.connect(this.outputBoostGain);
+            this.outputBoostGain.connect(this.masterCompressor);
             this.masterCompressor.connect(this.audioCtx.destination);
         }
         if (this.audioCtx.state === 'suspended') {
@@ -83,7 +89,7 @@ export class AudioEngine {
         gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
 
         osc.connect(gain);
-        gain.connect(this.masterCompressor);
+        gain.connect(this.masterGain);
         osc.start(now);
         osc.stop(now + 0.08);
     }
@@ -151,14 +157,17 @@ export class AudioEngine {
         this.activeAudioNodes = {};
     }
 
-    /** 设置主音量 (0-10) */
+    /** 设置主音量 (0-1) */
     setVolume(value) {
         if (this.masterGain) {
-            const parsedVolume = parseFloat(value);
-            if (Number.isFinite(parsedVolume)) {
-                this.masterGain.gain.value = parsedVolume;
-            }
+            this.masterGain.gain.value = this._normalizeVolume(value);
         }
+    }
+
+    _normalizeVolume(value) {
+        const parsedVolume = parseFloat(value);
+        if (!Number.isFinite(parsedVolume)) return 1;
+        return Math.max(0, Math.min(1, parsedVolume));
     }
 
     /** 更新状态文本 (内部) */

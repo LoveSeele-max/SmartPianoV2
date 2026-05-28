@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260527-waterfall-key-align"></script>
+    <script type="module" src="app.js?v=20260528-output-boost-60"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -90,6 +90,21 @@
             transition: border-color 0.15s;
         }
         .ctrl-number:focus { outline: none; border-color: #22d3ee; }
+
+        .ctrl-range {
+            width: 94px;
+            accent-color: #22d3ee;
+            cursor: pointer;
+        }
+
+        .ctrl-value {
+            min-width: 2.4rem;
+            color: #22d3ee;
+            font-size: 0.72rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-weight: 700;
+            text-align: right;
+        }
 
         /* ── Toggle switch ── */
         .tog-track {
@@ -251,6 +266,15 @@
             </div>
         </div>
 
+        <div class="flex items-center gap-3 mb-2" style="font-size:0.68rem; color:#71717a; min-height:18px;">
+            <div style="white-space:nowrap;">
+                Current:&nbsp;<span id="current-song-name" style="color:#e4e4e7; font-weight:700;">《小星星》</span>
+            </div>
+            <div style="min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;">
+                Audio:&nbsp;<span id="instruction-text" style="color:#a5f3fc;">内置《小星星》示例曲谱。</span>
+            </div>
+        </div>
+
         <!-- Controls row -->
         <div class="flex gap-2 items-stretch" style="min-height:80px;">
 
@@ -296,6 +320,15 @@
                 <div class="flex flex-col justify-end h-full" style="min-width:80px;">
                     <span class="ctrl-label">Beat Control (BPM)</span>
                     <input type="number" id="bpm-ui" class="ctrl-number" value="100" min="10" max="300">
+                </div>
+
+                <!-- Column: Volume -->
+                <div class="flex flex-col justify-end h-full" style="min-width:126px;">
+                    <span class="ctrl-label">Volume</span>
+                    <div class="flex items-center gap-2" style="height:28px;">
+                        <input type="range" id="volume-slider" class="ctrl-range" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+                        <span id="volume-value" class="ctrl-value">100%</span>
+                    </div>
                 </div>
 
                 <!-- Column: Metronome toggle -->
@@ -367,10 +400,7 @@
 
         <!-- Hidden elements required by app.js -->
         <div style="display:none;">
-            <span id="current-song-name">《小星星》</span>
-            <span id="instruction-text">内置《小星星》示例曲谱。</span>
             <input type="range" id="progress-slider" min="0" max="100" value="0" step="0.1">
-            <input type="range" id="volume-slider" min="0" max="10" step="0.1" value="8">
             <button id="btn-skip-backward"></button>
             <button id="btn-skip-forward"></button>
         </div>
