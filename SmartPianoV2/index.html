@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260528-playback-fixes"></script>
+    <script type="module" src="app.js?v=20260531-requirements"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -261,7 +261,7 @@
         <div class="flex items-center mb-2" style="position:relative;">
             <div style="flex:1;"></div>
             <h1 class="text-sm font-black tracking-tight text-zinc-100" style="position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;">
-                Smart Piano V2 (Yamaha PSR-E383)
+                Smart Piano V2
             </h1>
             <div style="flex:1; text-align:right; font-size:0.7rem; color:#71717a;">
                 Device Status:&nbsp;<span id="midi-status-text" style="color:#22d3ee; font-weight:600;">初始化中...</span>
@@ -295,8 +295,8 @@
                         <span class="ctrl-label">MIDI Input</span>
                         <div class="flex items-center gap-1.5">
                             <span id="midi-dot" class="midi-status-dot midi-disconnected"></span>
-                            <select class="ctrl-select" style="min-width:120px;">
-                                <option>Yamaha PSR-E383</option>
+                            <select id="midi-input-select" class="ctrl-select" style="min-width:120px;" disabled>
+                                <option>Detecting MIDI...</option>
                             </select>
                         </div>
                     </div>

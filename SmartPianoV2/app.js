@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260528-playback-fixes';
+import { AudioEngine } from './audioEngine.js?v=20260531-requirements';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -120,6 +120,7 @@ const bpmUI = document.getElementById('bpm-ui');
 const volumeValueUI = document.getElementById('volume-value');
 const midiDot = document.getElementById('midi-dot');
 const midiStatusText = document.getElementById('midi-status-text');
+const midiInputSelect = document.getElementById('midi-input-select');
 
 function isAutoPlaybackMode() {
     return currentMode === 'auto' || currentMode === 'waterfall';
@@ -148,6 +149,16 @@ function resetPlaybackProgress(redraw = true) {
 function isPlaybackComplete() {
     return currentBeat >= globalTotalBeats - 0.001 ||
         (currentSongInfo.data.length > 0 && currentSongInfo.data.every(note => note.played));
+}
+
+function updateMidiInputSelect(label, connected = false) {
+    if (!midiInputSelect) return;
+
+    const option = document.createElement('option');
+    option.textContent = label;
+    option.value = connected ? label : '';
+    midiInputSelect.replaceChildren(option);
+    midiInputSelect.disabled = true;
 }
 
 function getReadyMessage() {
@@ -961,17 +972,16 @@ function finishPlaying(sessionId = playbackSessionId) {
 }
 
 function resetPractice() {
+    stopPlayback(currentMode === 'metro' ? '节拍器就绪，点击播放。' : getReadyMessage());
+}
+
+function stopPlayback(message = '已停止播放并回到开头。') {
     stopActivePlayback();
     audioEngine.stopAllNotes();
     resetPlaybackProgress();
-
     btnPlayPause.innerText = '播放';
     setPlayButtonAppearance('ready');
-    if (currentMode === 'metro') {
-        instructionText.innerText = '节拍器就绪，点击播放。';
-    } else {
-        instructionText.innerText = getReadyMessage();
-    }
+    instructionText.innerText = message;
     updatePlaylistUI();
 }
 
@@ -981,9 +991,7 @@ function stopFromPlaylist(sheetId) {
         return;
     }
 
-    resetPractice();
-    instructionText.innerText = '已停止播放并回到开头。';
-    updatePlaylistUI();
+    stopPlayback();
 }
 
 function seekToBeat(targetBeat) {
@@ -1536,6 +1544,7 @@ midiController.onNoteOn((midi) => handleNoteOn(midi));
 midiController.onNoteOff((midi) => handleNoteOff(midi));
 midiController.onStatusChange((text, connected) => {
     midiStatusText.innerText = text;
+    updateMidiInputSelect(connected ? midiController.getDeviceName() || text : text, connected);
     if (connected) {
         midiDot.classList.replace('midi-disconnected', 'midi-connected');
     } else {
@@ -1576,6 +1585,7 @@ export function init() {
         audioEngine.setVolume(volumeSlider.value);
         updateVolumeDisplay(volumeSlider.value);
     }
+    updateMidiInputSelect('Detecting MIDI...', false);
     midiController.init();
 
     // 初始化播放列表

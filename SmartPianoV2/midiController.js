@@ -1,6 +1,6 @@
 /**
  * midiController.js - MIDI 控制器模块
- * 专职管理 Web MIDI API 连接、雅马哈专属信号过滤、MIDI 信号解析
+ * 专职管理 Web MIDI API 连接、系统实时消息过滤、MIDI 信号解析
  */
 
 export class MidiController {
@@ -71,10 +71,10 @@ export class MidiController {
 
     /**
      * MIDI 消息处理
-     * 【雅马哈专属优化】过滤掉心跳包(254)和时钟信号(248)
+     * 过滤 MIDI Active Sensing(254) 和 Timing Clock(248)，避免系统实时消息误触发音符
      */
     _onMIDIMessage(message) {
-        // 雅马哈 PSR-E383 专属优化：过滤心跳包和时钟信号
+        // 通用 MIDI 实时消息过滤：不同品牌键盘都可能发送这些非音符事件
         if (message.data[0] === 254 || message.data[0] === 248) return;
 
         // 提取高四位指令，忽略低四位通道号
