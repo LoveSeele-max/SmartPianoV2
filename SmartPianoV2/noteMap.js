@@ -7,14 +7,18 @@
 const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const flatNoteNames = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const labels = ['do', '', 're', '', 'mi', 'fa', '', 'sol', '', 'la', '', 'si'];
+const MIDI_MIN = 21;
+const MIDI_MAX = 108;
+const RENDER_MIN = 36;
+const RENDER_MAX = 96;
 
 // 数据存储
 const noteMap = {};
 const midiToNoteName = {};
 const whiteKeysToRender = [];
 
-// 初始化所有音符 (MIDI 36~96)
-for (let midi = 36; midi <= 96; midi++) {
+// 初始化完整钢琴范围 (MIDI 21~108)，虚拟键盘仍渲染原 61 键范围
+for (let midi = MIDI_MIN; midi <= MIDI_MAX; midi++) {
     const noteIndex = midi % 12;
     const octave = Math.floor(midi / 12) - 1;
     const name = noteNames[noteIndex] + octave;
@@ -36,7 +40,7 @@ for (let midi = 36; midi <= 96; midi++) {
     }
     midiToNoteName[midi] = name;
 
-    if (!isBlack) whiteKeysToRender.push(name);
+    if (!isBlack && midi >= RENDER_MIN && midi <= RENDER_MAX) whiteKeysToRender.push(name);
 }
 
 /** 根据音符名称获取音符信息 */
@@ -62,4 +66,4 @@ export function getNoteNames() {
     return [...noteNames];
 }
 
-export { noteMap, midiToNoteName, whiteKeysToRender };
+export { noteMap, midiToNoteName, whiteKeysToRender, MIDI_MIN, MIDI_MAX };

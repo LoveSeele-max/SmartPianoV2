@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260531-requirements';
+import { AudioEngine } from './audioEngine.js?v=20260602-mobile-fix';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -52,6 +52,10 @@ let songLoadRequestId = 0;
 let currentSheetId = null;
 let libraryCache = [];
 let playlistRenderRequestId = 0;
+let keyboardMetricsKey = '';
+let keyboardGlobalEventsBound = false;
+const activePointerNotes = new Map();
+const pointerNoteCounts = new Map();
 
 // Canvas 卷帘窗变量
 let canvasCtx = null;
@@ -685,12 +689,115 @@ function drawSheet(beatPosition) {
     ctx.restore();
 }
 
-/** Pointer Events 驱动的虚拟键盘渲染（修复鼠标滑动卡键问题） */
+function getKeyboardMetrics() {
+    const isCoarsePointer = window.matchMedia?.('(pointer: coarse)').matches;
+    const compactViewport = window.innerWidth <= 720 || window.innerHeight <= 520;
+    const whiteKeyWidth = compactViewport ? 36 : isCoarsePointer ? 44 : 40;
+    const blackKeyWidth = Math.round(whiteKeyWidth * 0.6);
+    const blackKeyHeight = compactViewport ? '62%' : '60%';
+
+    return {
+        whiteKeyWidth,
+        blackKeyWidth,
+        blackKeyHeight,
+        key: `${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
+    };
+}
+
+function getPointerKeyMidi(target) {
+    const keyElement = target?.closest?.('[data-midi]');
+    const midi = Number(keyElement?.dataset.midi);
+    return Number.isFinite(midi) ? midi : null;
+}
+
+function getPointerKeyMidiFromPoint(clientX, clientY) {
+    return getPointerKeyMidi(document.elementFromPoint(clientX, clientY));
+}
+
+function releasePointerNote(pointerId) {
+    const midi = activePointerNotes.get(pointerId);
+    if (midi === undefined) return;
+
+    activePointerNotes.delete(pointerId);
+    const nextCount = (pointerNoteCounts.get(midi) || 1) - 1;
+    if (nextCount <= 0) {
+        pointerNoteCounts.delete(midi);
+        handleNoteOff(midi);
+    } else {
+        pointerNoteCounts.set(midi, nextCount);
+    }
+}
+
+function pressPointerNote(pointerId, midi) {
+    const currentMidi = activePointerNotes.get(pointerId);
+    if (currentMidi === midi) return;
+    if (currentMidi !== undefined) releasePointerNote(pointerId);
+
+    activePointerNotes.set(pointerId, midi);
+    const currentCount = pointerNoteCounts.get(midi) || 0;
+    pointerNoteCounts.set(midi, currentCount + 1);
+    if (currentCount === 0) handleNoteOn(midi, () => pointerNoteCounts.has(midi));
+}
+
+function releaseAllPointerNotes() {
+    activePointerNotes.clear();
+    pointerNoteCounts.forEach((_, midi) => handleNoteOff(midi));
+    pointerNoteCounts.clear();
+    document.querySelectorAll('.key-pressed').forEach(el => el.classList.remove('key-pressed'));
+}
+
+function handleKeyPointerDown(event, midi) {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+    } catch (e) { /* 某些浏览器/测试环境可能不支持捕获 */ }
+    pressPointerNote(event.pointerId, midi);
+}
+
+function handleKeyPointerMove(event) {
+    if (!activePointerNotes.has(event.pointerId) || event.pointerType === 'mouse') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const nextMidi = getPointerKeyMidiFromPoint(event.clientX, event.clientY);
+    if (nextMidi === null) {
+        releasePointerNote(event.pointerId);
+    } else {
+        pressPointerNote(event.pointerId, nextMidi);
+    }
+}
+
+function handleKeyPointerUp(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    releasePointerNote(event.pointerId);
+    try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch (e) { /* 忽略未捕获或不支持的指针 */ }
+}
+
+function handleKeyPointerLeave(event) {
+    if (event.pointerType === 'mouse') releasePointerNote(event.pointerId);
+}
+
+function bindKeyboardGlobalEvents() {
+    if (keyboardGlobalEventsBound) return;
+    keyboardGlobalEventsBound = true;
+
+    document.addEventListener('pointerup', (event) => releasePointerNote(event.pointerId));
+    document.addEventListener('pointercancel', (event) => releasePointerNote(event.pointerId));
+    window.addEventListener('blur', releaseAllPointerNotes);
+}
+
+/** Pointer Events 驱动的虚拟键盘渲染（支持移动端多指触控） */
 function renderKeyboard() {
     keyboardContainer.replaceChildren();
-    const whiteKeyWidth = 40;
-    const blackKeyWidth = 24;
-    const blackKeyHeight = '60%';
+    releaseAllPointerNotes();
+    bindKeyboardGlobalEvents();
+
+    const { whiteKeyWidth, blackKeyWidth, blackKeyHeight, key } = getKeyboardMetrics();
+    keyboardMetricsKey = key;
     const whiteKeysOnly = getWhiteKeys();
     const blackKeyPositions = [];
 
@@ -703,7 +810,8 @@ function renderKeyboard() {
 
         const keyDiv = document.createElement('div');
         keyDiv.id = `key-${noteInfo.midi}`;
-                keyDiv.className = 'key-white w-10 h-full mx-[1px] flex items-end justify-center pb-3 text-xs font-bold cursor-pointer shrink-0';
+        keyDiv.dataset.midi = String(noteInfo.midi);
+        keyDiv.className = 'key-white h-full mx-[1px] flex items-end justify-center pb-3 text-xs font-bold cursor-pointer shrink-0';
         const keyLabel = document.createElement('span');
         keyLabel.className = 'key-label';
         keyLabel.textContent = keyName;
@@ -711,14 +819,11 @@ function renderKeyboard() {
         keyDiv.style.width = `${whiteKeyWidth}px`;
         keyDiv.dataset.whiteIndex = idx;
 
-        // 改用 Pointer Events
-        keyDiv.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            handleNoteOn(noteInfo.midi);
-        });
-        keyDiv.addEventListener('pointerup', () => handleNoteOff(noteInfo.midi));
-        keyDiv.addEventListener('pointercancel', () => handleNoteOff(noteInfo.midi));
-        keyDiv.addEventListener('pointerleave', () => handleNoteOff(noteInfo.midi));
+        keyDiv.addEventListener('pointerdown', (e) => handleKeyPointerDown(e, noteInfo.midi));
+        keyDiv.addEventListener('pointermove', handleKeyPointerMove);
+        keyDiv.addEventListener('pointerup', handleKeyPointerUp);
+        keyDiv.addEventListener('pointercancel', handleKeyPointerUp);
+        keyDiv.addEventListener('pointerleave', handleKeyPointerLeave);
 
         keyboardContainer.appendChild(keyDiv);
 
@@ -740,26 +845,24 @@ function renderKeyboard() {
     blackKeyPositions.forEach(({ left, name, midi }) => {
         const keyDiv = document.createElement('div');
         keyDiv.id = `key-${midi}`;
+        keyDiv.dataset.midi = String(midi);
         keyDiv.className = 'key-black absolute flex items-end justify-center pb-4 text-[9px] font-bold cursor-pointer z-10';
         keyDiv.style.width = `${blackKeyWidth}px`;
         keyDiv.style.height = blackKeyHeight;
         keyDiv.style.left = `${left}px`;
-                keyDiv.style.top = '0';
+        keyDiv.style.top = '0';
         const keyLabel = document.createElement('span');
         keyLabel.className = 'key-label';
         keyLabel.textContent = name.replace('#', '♯');
         keyDiv.appendChild(keyLabel);
 
-        keyDiv.addEventListener('pointerdown', (e) => { e.stopPropagation(); handleNoteOn(midi); });
-        keyDiv.addEventListener('pointerup', (e) => { e.stopPropagation(); handleNoteOff(midi); });
-        keyDiv.addEventListener('pointercancel', (e) => { e.stopPropagation(); handleNoteOff(midi); });
+        keyDiv.addEventListener('pointerdown', (e) => handleKeyPointerDown(e, midi));
+        keyDiv.addEventListener('pointermove', handleKeyPointerMove);
+        keyDiv.addEventListener('pointerup', handleKeyPointerUp);
+        keyDiv.addEventListener('pointercancel', handleKeyPointerUp);
+        keyDiv.addEventListener('pointerleave', handleKeyPointerLeave);
 
         keyboardContainer.appendChild(keyDiv);
-    });
-
-    // 全局 pointerup 保障：防止任何卡键
-    document.addEventListener('pointerup', () => {
-        document.querySelectorAll('.key-pressed').forEach(el => el.classList.remove('key-pressed'));
     });
 }
 
@@ -1081,8 +1184,15 @@ function checkPracticeNote(midiNumber) {
 
 // ==================== 音符事件处理 ====================
 
-async function handleNoteOn(midiNumber) {
-    if (!audioEngine.getContext()) await audioEngine.init();
+async function handleNoteOn(midiNumber, shouldStillPlay = null) {
+    if (!audioEngine.getContext()) {
+        await audioEngine.ensureContext();
+        audioEngine.init().catch(err => console.warn('音色后台加载失败:', err));
+    } else {
+        await audioEngine.ensureContext();
+    }
+
+    if (shouldStillPlay && !shouldStillPlay()) return null;
 
     const keyElement = document.getElementById(`key-${midiNumber}`);
     if (keyElement) {
@@ -1192,8 +1302,8 @@ function loadDemoSong(message = '曲谱库已清空，已回到内置示例曲�
 }
 
 function applyParsedSong(songData, fileName, options = {}) {
-    const shouldSaveToLibrary = options.saveToLibrary === true;
-    const delayMs = options.delayMs ?? (shouldSaveToLibrary ? 500 : 0);
+    const shouldAutoSave = typeof options.autoSave === 'boolean' ? options.autoSave : options.saveToLibrary === true;
+    const delayMs = options.delayMs ?? (shouldAutoSave ? 500 : 0);
     const autoPlay = options.autoPlay === true;
     const loadRequestId = ++songLoadRequestId;
     const normalizedSong = normalizeSongData(songData);
@@ -1226,7 +1336,7 @@ function applyParsedSong(songData, fileName, options = {}) {
         msPerBeat = (60 / bpm) * 1000;
         bpmUI.value = bpm;
 
-        if (shouldSaveToLibrary) {
+        if (shouldAutoSave) {
             // 自动保存到本地库
             saveToLibrary(normalizedSong, fileName).then((savedId) => {
                 if (loadRequestId === songLoadRequestId) currentSheetId = normalizeLibraryId(savedId);
@@ -1400,7 +1510,7 @@ window.loadSheetFromLibrary = async function(id, options = {}) {
         const sheet = libraryCache.find(item => normalizeLibraryId(item.id) === sheetId) || await getSheetById(sheetId);
         if (sheet) {
             applyParsedSong(sheet, sheet.fileName || sheet.name, {
-                saveToLibrary: false,
+                autoSave: false,
                 libraryId: sheetId,
                 autoPlay: options.autoPlay === true,
                 delayMs: 0
@@ -1513,21 +1623,19 @@ uploadInput.addEventListener('change', async function(e) {
                 file.name,
                 Math.round((index / files.length) * 80) + 10
             );
-            lastParsed = { song: await parseUploadFile(file), fileName: file.name };
-            await saveToLibrary(normalizeSongData(lastParsed.song), file.name);
+            const parsedSong = await parseUploadFile(file);
+            if (index === files.length - 1) {
+                lastParsed = { song: parsedSong, fileName: file.name };
+            } else {
+                await saveToLibrary(normalizeSongData(parsedSong), file.name);
+            }
         }
 
         if (lastParsed) {
-            const sheets = await getAllSheets();
-            libraryCache = sheets;
-            const newestSheet = sheets[0];
-            if (newestSheet) {
-                applyParsedSong(newestSheet, newestSheet.fileName || newestSheet.name, {
-                    saveToLibrary: false,
-                    libraryId: newestSheet.id,
-                    delayMs: 0
-                });
-            }
+            applyParsedSong(lastParsed.song, lastParsed.fileName, {
+                autoSave: true,
+                delayMs: 0
+            });
         }
     } catch (err) {
         hideParseModal();
@@ -1559,6 +1667,11 @@ audioEngine.onStatusChange((text) => {
 
 // 窗口大小变化时重绘 Canvas
 window.addEventListener('resize', () => {
+    const nextKeyboardMetricsKey = getKeyboardMetrics().key;
+    if (nextKeyboardMetricsKey !== keyboardMetricsKey) {
+        renderKeyboard();
+    }
+
     if (sheetCanvas) {
         resizeSheetCanvas();
         drawSheet(currentBeat);

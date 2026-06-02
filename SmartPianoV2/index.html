@@ -10,14 +10,28 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260531-requirements"></script>
+    <script type="module" src="app.js?v=20260602-mobile-fix"></script>
         <style>
         * { box-sizing: border-box; }
+
+        html,
+        body {
+            overscroll-behavior: none;
+        }
 
         body {
             background: #111113;
             color: #e4e4e7;
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        button,
+        input,
+        select {
+            touch-action: manipulation;
         }
 
         /* ── Header panel card ── */
@@ -205,6 +219,26 @@
         /* ── Sheet canvas ── */
         #sheet-canvas { cursor: pointer; touch-action: none; }
 
+        .control-strip {
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        .control-strip > .hdr-card {
+            flex-shrink: 0;
+        }
+
+        #keyboard-shell {
+            touch-action: pan-x;
+            overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        #virtual-keyboard {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
         /* ── Piano keys ── */
         .key-white {
             background: linear-gradient(180deg, #f0ede4 0%, #ccc5ae 100%);
@@ -215,6 +249,9 @@
             box-shadow: inset 0 -5px 10px rgba(0,0,0,0.10), 0 3px 7px rgba(0,0,0,0.32);
             transition: transform 0.07s ease, background 0.07s ease;
             touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         .key-black {
             background: linear-gradient(180deg, #1a1a1c 0%, #000 100%);
@@ -225,6 +262,9 @@
             box-shadow: 2px 3px 5px rgba(0,0,0,0.65), inset 0 -5px 9px rgba(0,0,0,0.5);
             transition: transform 0.07s ease, background 0.07s ease;
             touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         .key-label {
             font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -248,6 +288,284 @@
             transform: translateY(2px) scale(0.97);
             transition: none !important;
         }
+
+        @media (pointer: coarse) {
+            .ctrl-select,
+            .ctrl-number {
+                min-height: 34px;
+                font-size: 0.82rem;
+            }
+            .ctrl-range {
+                width: 118px;
+                height: 30px;
+            }
+            .tog-track {
+                width: 42px;
+                height: 24px;
+            }
+            .tog-thumb {
+                width: 20px;
+                height: 20px;
+            }
+            .tog-track.on .tog-thumb { transform: translateX(18px); }
+            #keyboard-shell {
+                height: 152px !important;
+            }
+            .key-label {
+                font-size: 0.56rem;
+            }
+        }
+
+        @media (max-width: 720px) {
+            html,
+            body {
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+            body {
+                min-width: 0;
+            }
+            header {
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+            .title-row {
+                display: grid !important;
+                grid-template-columns: 1fr;
+                gap: 0.25rem;
+                margin-bottom: 0.35rem !important;
+            }
+            .title-row > div:first-child {
+                display: none;
+            }
+            .title-row h1 {
+                position: static !important;
+                transform: none !important;
+                text-align: center;
+                font-size: 1rem !important;
+                line-height: 1.15;
+            }
+            .title-row > div:last-child {
+                text-align: center !important;
+                font-size: 0.66rem !important;
+                line-height: 1.25;
+                white-space: normal;
+            }
+            .song-status-row {
+                display: grid !important;
+                grid-template-columns: 1fr;
+                gap: 0.2rem !important;
+                min-height: unset !important;
+                margin-bottom: 0.4rem !important;
+                font-size: 0.66rem !important;
+            }
+            .song-status-row > div {
+                min-width: 0 !important;
+                text-align: left !important;
+                white-space: normal !important;
+                overflow: visible !important;
+            }
+            .control-strip {
+                display: grid !important;
+                grid-template-columns: 1fr;
+                gap: 0.45rem !important;
+                min-height: 0 !important;
+                overflow: visible;
+                padding-bottom: 0.15rem;
+            }
+            .control-strip > .hdr-card {
+                width: 100%;
+                min-width: 0 !important;
+                max-width: 100%;
+            }
+            .main-control-card {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                align-items: end !important;
+                gap: 0.55rem 0.65rem !important;
+                padding: 0.55rem !important;
+            }
+            .main-control-card > div {
+                min-width: 0 !important;
+                height: auto !important;
+                justify-content: end !important;
+            }
+            .main-control-card > div:first-child,
+            .midi-control-field {
+                display: none !important;
+            }
+            .main-control-card .ctrl-label {
+                margin-bottom: 0.22rem;
+                letter-spacing: 0.05em;
+            }
+            .mode-control-field .mode-quick-btn {
+                height: 28px;
+            }
+            .volume-control-field {
+                grid-column: 1 / -1;
+            }
+            .volume-control-field > div {
+                height: 32px !important;
+            }
+            #volume-slider {
+                width: 100%;
+                min-width: 0;
+            }
+            .transport-controls {
+                flex-direction: row !important;
+                align-items: stretch;
+            }
+            .transport-controls button {
+                flex: 1;
+                min-width: 0 !important;
+                min-height: 38px;
+                font-size: 0.84rem !important;
+                padding: 0.35rem 0.45rem !important;
+            }
+            .library-card {
+                padding: 0.5rem 0.55rem !important;
+            }
+            .library-card > .ctrl-label {
+                display: none;
+            }
+            .library-content {
+                display: block !important;
+                min-height: 0 !important;
+            }
+            .library-card .add-btn {
+                width: 100%;
+                min-height: 44px;
+                flex-direction: row;
+                gap: 0.55rem;
+                padding: 0.55rem 0.75rem;
+            }
+            .library-card .add-btn .plus {
+                font-size: 1.25rem;
+            }
+            .playlist-scroller {
+                display: none;
+            }
+            main {
+                padding: 0.45rem 0.5rem !important;
+            }
+            #keyboard-shell {
+                height: 144px !important;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .main-control-card {
+                gap: 0.5rem !important;
+            }
+            .transport-controls {
+                grid-column: 1 / -1;
+            }
+        }
+
+        @media (max-height: 520px) {
+            header {
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+            #keyboard-shell {
+                height: 136px !important;
+            }
+            .key-label {
+                font-size: 0.54rem;
+            }
+        }
+
+        @media (max-height: 520px) and (orientation: landscape) {
+            header {
+                padding-top: 0.35rem !important;
+                padding-bottom: 0.35rem !important;
+            }
+            .title-row {
+                display: grid !important;
+                grid-template-columns: 1fr auto 1fr;
+                align-items: center;
+                margin-bottom: 0.25rem !important;
+            }
+            .title-row h1 {
+                position: static !important;
+                transform: none !important;
+                text-align: center;
+                font-size: 0.82rem !important;
+            }
+            .title-row > div:last-child {
+                font-size: 0.58rem !important;
+                line-height: 1.15;
+            }
+            .song-status-row {
+                display: none !important;
+            }
+            .control-strip {
+                display: block !important;
+                min-height: 0 !important;
+                overflow: visible;
+            }
+            .control-strip > .hdr-card {
+                width: 100%;
+                min-width: 0 !important;
+                max-width: 100%;
+            }
+            .main-control-card {
+                display: grid !important;
+                grid-template-columns: minmax(104px, 1fr) 78px minmax(130px, 1.35fr) 90px 132px;
+                align-items: end !important;
+                gap: 0.45rem !important;
+                padding: 0.45rem 0.55rem !important;
+                min-height: 0 !important;
+            }
+            .main-control-card > div {
+                min-width: 0 !important;
+                height: auto !important;
+                justify-content: end !important;
+            }
+            .midi-control-field,
+            .library-card {
+                display: none !important;
+            }
+            .mode-control-field .mode-quick-btn {
+                display: none;
+            }
+            .main-control-card .ctrl-label {
+                margin-bottom: 0.18rem;
+                font-size: 0.54rem;
+                letter-spacing: 0.05em;
+            }
+            .ctrl-select,
+            .ctrl-number {
+                min-height: 30px;
+                font-size: 0.72rem;
+            }
+            .volume-control-field > div,
+            .metro-control-field > div {
+                height: 30px !important;
+            }
+            #volume-slider {
+                width: 100%;
+                min-width: 0;
+            }
+            .transport-controls {
+                flex-direction: row !important;
+                gap: 0.4rem !important;
+            }
+            .transport-controls button {
+                flex: 1;
+                min-width: 0 !important;
+                min-height: 32px;
+                font-size: 0.74rem !important;
+                padding: 0.25rem 0.35rem !important;
+            }
+            main {
+                padding: 0.35rem 0.5rem !important;
+            }
+            #keyboard-shell {
+                height: 118px !important;
+            }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden select-none">
@@ -258,7 +576,7 @@
     <header class="shrink-0 px-4 pt-2 pb-2" style="background:#111113; border-bottom:1px solid #222224;">
 
         <!-- Title row -->
-        <div class="flex items-center mb-2" style="position:relative;">
+        <div class="title-row flex items-center mb-2" style="position:relative;">
             <div style="flex:1;"></div>
             <h1 class="text-sm font-black tracking-tight text-zinc-100" style="position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;">
                 Smart Piano V2
@@ -268,7 +586,7 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-3 mb-2" style="font-size:0.68rem; color:#71717a; min-height:18px;">
+        <div class="song-status-row flex items-center gap-3 mb-2" style="font-size:0.68rem; color:#71717a; min-height:18px;">
             <div style="white-space:nowrap;">
                 Current:&nbsp;<span id="current-song-name" style="color:#e4e4e7; font-weight:700;">《小星星》</span>
             </div>
@@ -278,10 +596,10 @@
         </div>
 
         <!-- Controls row -->
-        <div class="flex gap-2 items-stretch" style="min-height:80px;">
+        <div class="control-strip flex gap-2 items-stretch" style="min-height:80px;">
 
             <!-- ── Device & Mode card ── -->
-            <div class="hdr-card px-3 py-2 flex gap-4 items-start shrink-0">
+            <div class="hdr-card main-control-card px-3 py-2 flex gap-4 items-start shrink-0">
 
                 <!-- Section title -->
                 <div style="position:absolute; margin-top:-0.1rem;">
@@ -289,7 +607,7 @@
                 </div>
 
                 <!-- Column: section label + MIDI Input -->
-                <div class="flex flex-col justify-between h-full" style="min-width:130px;">
+                <div class="midi-control-field flex flex-col justify-between h-full" style="min-width:130px;">
                     <div class="ctrl-label" style="color:#a1a1aa; font-size:0.65rem; margin-bottom:0.5rem;">Device &amp; Mode</div>
                     <div>
                         <span class="ctrl-label">MIDI Input</span>
@@ -303,7 +621,7 @@
                 </div>
 
                 <!-- Column: Mode Select -->
-                <div class="flex flex-col justify-end h-full" style="min-width:110px;">
+                <div class="mode-control-field flex flex-col justify-end h-full" style="min-width:110px;">
                     <span class="ctrl-label">Mode Select</span>
                     <select id="mode-select-native" class="ctrl-select">
                         <option value="auto">Play</option>
@@ -319,13 +637,13 @@
                 </div>
 
                 <!-- Column: BPM -->
-                <div class="flex flex-col justify-end h-full" style="min-width:80px;">
+                <div class="bpm-control-field flex flex-col justify-end h-full" style="min-width:80px;">
                     <span class="ctrl-label">Beat Control (BPM)</span>
                     <input type="number" id="bpm-ui" class="ctrl-number" value="100" min="10" max="300">
                 </div>
 
                 <!-- Column: Volume -->
-                <div class="flex flex-col justify-end h-full" style="min-width:126px;">
+                <div class="volume-control-field flex flex-col justify-end h-full" style="min-width:126px;">
                     <span class="ctrl-label">Volume</span>
                     <div class="flex items-center gap-2" style="height:28px;">
                         <input type="range" id="volume-slider" class="ctrl-range" min="0" max="1" step="0.01" value="1" aria-label="Volume">
@@ -334,7 +652,7 @@
                 </div>
 
                 <!-- Column: Metronome toggle -->
-                <div class="flex flex-col justify-end h-full">
+                <div class="metro-control-field flex flex-col justify-end h-full">
                     <span class="ctrl-label">Metronome</span>
                     <div class="flex items-center" style="height:28px;">
                         <button type="button" class="tog-track" id="metronome-toggle" aria-label="Metronome" aria-pressed="false">
@@ -344,7 +662,7 @@
                 </div>
 
                 <!-- Column: Play / Reset -->
-                <div class="flex flex-col justify-end h-full gap-1.5">
+                <div class="transport-controls flex flex-col justify-end h-full gap-1.5">
                     <button id="btn-play-pause"
                         style="background:#22c55e; border:none; border-radius:0.35rem; color:#fff; font-size:0.72rem; font-weight:700; padding:0.3rem 1rem; cursor:pointer; min-width:64px; transition:background 0.15s;"
                         onmouseover="this.style.background='#16a34a'" onmouseout="this.style.background='#22c55e'">
@@ -360,10 +678,10 @@
             </div><!-- end Device & Mode card -->
 
             <!-- ── Sheet Library & Actions card ── -->
-            <div class="hdr-card px-3 py-2 flex flex-col" style="flex:1; min-width:0;">
+            <div class="hdr-card library-card px-3 py-2 flex flex-col" style="flex:1; min-width:0;">
                 <div class="ctrl-label" style="color:#a1a1aa; font-size:0.65rem; margin-bottom:0.4rem;">Sheet Library &amp; Actions</div>
 
-                <div class="flex gap-2" style="flex:1; min-height:0;">
+                <div class="library-content flex gap-2" style="flex:1; min-height:0;">
 
                     <!-- Add Sheet button -->
                     <label class="add-btn" id="add-sheet-label" for="upload-sheet">
@@ -374,7 +692,7 @@
                     </label>
 
                     <!-- Table -->
-                    <div class="no-sb" style="flex:1; overflow:auto; border:1px solid #2a2a2e; border-radius:0.4rem;">
+                    <div class="playlist-scroller no-sb" style="flex:1; overflow:auto; border:1px solid #2a2a2e; border-radius:0.4rem;">
                         <table class="sh-table">
                             <thead>
                                 <tr>
@@ -421,7 +739,7 @@
     <!-- ══════════════════════════════════════════
          PIANO KEYBOARD
     ══════════════════════════════════════════ -->
-    <footer class="shrink-0 overflow-x-auto overflow-y-hidden"
+    <footer id="keyboard-shell" class="shrink-0 overflow-x-auto overflow-y-hidden"
             style="height:128px; background:#18181a; border-top:1px solid #28282c;">
         <div id="virtual-keyboard"
              class="relative flex items-stretch justify-center"

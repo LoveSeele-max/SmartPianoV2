@@ -4,6 +4,7 @@
  */
 
 const OUTPUT_BOOST = 6;
+const FALLBACK_NOTE_GAIN = 0.22;
 
 export class AudioEngine {
     constructor() {
@@ -15,6 +16,7 @@ export class AudioEngine {
         this.outputBoostGain = null;
         this.masterCompressor = null;
         this.loadingPromise = null;
+        this.usingFallback = false;
         this._onStatusChange = null;
     }
 
@@ -109,32 +111,79 @@ export class AudioEngine {
                 destination: this.masterGain
             });
             this.pianoInstrument = piano;
+            this.usingFallback = false;
             this._updateStatus('🎹 钢琴音色加载完成！可以开始弹奏了。');
             return piano;
         } catch (err) {
             console.error('音色加载失败', err);
-            this._updateStatus('⚠️ 音色加载失败，请检查网络。');
+            this.usingFallback = true;
+            this._updateStatus('⚠️ 音色加载失败，已切换到备用合成音源。');
             return null;
         }
+    }
+
+    /** 使用 Web Audio oscillator 生成备用音源，保证断网或 CDN 失败时仍能发声 */
+    _playFallbackNote(midiNum) {
+        const ctx = this.audioCtx;
+        const now = ctx.currentTime;
+        const frequency = 440 * Math.pow(2, (midiNum - 69) / 12);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        let stopped = false;
+
+        osc.type = 'triangle';
+        osc.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(FALLBACK_NOTE_GAIN, now + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.25);
+
+        const fallbackNode = {
+            stop: (when = ctx.currentTime) => {
+                if (stopped) return;
+                stopped = true;
+                const stopAt = Math.max(ctx.currentTime, when);
+                try {
+                    gain.gain.cancelScheduledValues(stopAt);
+                    gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), stopAt);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, stopAt + 0.045);
+                    osc.stop(stopAt + 0.05);
+                } catch (e) { /* 忽略已停止节点 */ }
+            }
+        };
+
+        osc.onended = () => {
+            if (this.activeAudioNodes[midiNum] === fallbackNode) {
+                delete this.activeAudioNodes[midiNum];
+            }
+        };
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 1.35);
+        return fallbackNode;
     }
 
     /** 播放一个 MIDI 音符，返回专属节点引用 */
     playNote(midiNum) {
         if (!this.audioCtx) return null;
 
+        if (this.activeAudioNodes[midiNum]) {
+            try {
+                this.activeAudioNodes[midiNum].stop(this.audioCtx.currentTime + 0.05);
+            } catch (e) { /* 忽略已停止节点的错误 */ }
+        }
+
         if (this.pianoInstrument) {
-            // 停止同一个音符的旧声音
-            if (this.activeAudioNodes[midiNum]) {
-                try {
-                    this.activeAudioNodes[midiNum].stop(this.audioCtx.currentTime + 0.05);
-                } catch (e) { /* 忽略已停止节点的错误 */ }
-            }
             // 返回生成的节点，用作这个音符的"身份证"
             const playedNode = this.pianoInstrument.play(midiNum, this.audioCtx.currentTime, { gain: 1.0 });
             this.activeAudioNodes[midiNum] = playedNode;
             return playedNode;
         }
-        return null;
+
+        const fallbackNode = this._playFallbackNote(midiNum);
+        this.activeAudioNodes[midiNum] = fallbackNode;
+        return fallbackNode;
     }
 
     /** 停止一个音符的声音 */
