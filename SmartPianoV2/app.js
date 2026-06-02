@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260603-compact-keyboard';
+import { AudioEngine } from './audioEngine.js?v=20260603-fixed-compact-keyboard';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -56,10 +56,8 @@ let keyboardMetricsKey = '';
 let keyboardGlobalEventsBound = false;
 const activePointerNotes = new Map();
 const pointerNoteCounts = new Map();
-const KEYBOARD_LAYOUT_STORAGE_KEY = 'smart-piano-v2-keyboard-layout';
-const COMPACT_KEYBOARD_START_MIN = 24;
-const COMPACT_KEYBOARD_START_MAX = 84;
-const COMPACT_KEYBOARD_SPAN = 23;
+const COMPACT_KEYBOARD_MIN_MIDI = 48; // C3
+const COMPACT_KEYBOARD_MAX_MIDI = 71; // B4
 let keyboardLayoutMode = getInitialKeyboardLayoutMode();
 
 // Canvas 卷帘窗变量
@@ -146,12 +144,7 @@ function updateVolumeDisplay(value) {
 function getInitialKeyboardLayoutMode() {
     const queryMode = new URLSearchParams(window.location.search).get('keyboard');
     if (queryMode === 'compact' || queryMode === 'full') return queryMode;
-
-    try {
-        return localStorage.getItem(KEYBOARD_LAYOUT_STORAGE_KEY) === 'compact' ? 'compact' : 'full';
-    } catch (err) {
-        return 'full';
-    }
+    return 'full';
 }
 
 function isCompactKeyboardMode() {
@@ -168,19 +161,7 @@ function getWhiteKeysInMidiRange(minMidi, maxMidi) {
 }
 
 function getCompactKeyboardWhiteKeys() {
-    const noteMidis = currentSongInfo.data
-        .map(item => item.midi)
-        .filter(midi => Number.isFinite(midi));
-
-    const minMidi = noteMidis.length ? Math.min(...noteMidis) : 60;
-    const maxMidi = noteMidis.length ? Math.max(...noteMidis) : 69;
-    let startMidi = Math.floor(minMidi / 12) * 12;
-
-    if (maxMidi <= startMidi - 12 + COMPACT_KEYBOARD_SPAN) startMidi -= 12;
-    while (maxMidi > startMidi + COMPACT_KEYBOARD_SPAN) startMidi += 12;
-    startMidi = Math.max(COMPACT_KEYBOARD_START_MIN, Math.min(COMPACT_KEYBOARD_START_MAX, startMidi));
-
-    return getWhiteKeysInMidiRange(startMidi, startMidi + COMPACT_KEYBOARD_SPAN);
+    return getWhiteKeysInMidiRange(COMPACT_KEYBOARD_MIN_MIDI, COMPACT_KEYBOARD_MAX_MIDI);
 }
 
 function getKeyboardWhiteKeys() {
@@ -203,12 +184,6 @@ function setKeyboardLayoutMode(mode, options = {}) {
     const changed = keyboardLayoutMode !== nextMode;
     keyboardLayoutMode = nextMode;
     updateKeyboardLayoutToggle();
-
-    if (options.persist !== false) {
-        try {
-            localStorage.setItem(KEYBOARD_LAYOUT_STORAGE_KEY, keyboardLayoutMode);
-        } catch (err) { /* localStorage may be unavailable in private contexts. */ }
-    }
 
     if (options.render !== false && changed) {
         renderKeyboard();
@@ -784,7 +759,7 @@ function getKeyboardMetrics() {
             : 8;
         const whiteKeyMarginX = 2;
         const safetySpace = 4;
-        const maxWhiteKeyWidth = isCompactKeyboardMode() ? 52 : 36;
+        const maxWhiteKeyWidth = isCompactKeyboardMode() ? 96 : 36;
         const minWhiteKeyWidth = isCompactKeyboardMode() ? 20 : 10;
         const availableWidth = Math.max(shellWidth - paddingX - safetySpace, whiteKeyCount * minWhiteKeyWidth);
         const fittedWhiteKeyWidth = Math.floor((availableWidth - (whiteKeyCount * whiteKeyMarginX)) / whiteKeyCount);
@@ -911,6 +886,7 @@ function renderKeyboard() {
     const blackKeyPositions = [];
 
     keyboardContainer.style.position = 'relative';
+    keyboardContainer.dataset.layout = keyboardLayoutMode;
 
     // 第1遍：渲染所有白键
     whiteKeysOnly.forEach((keyName, idx) => {
@@ -1802,7 +1778,7 @@ if (keyboardContainer && keyboardContainer.parentElement) {
 
 export function init() {
     renderSheet();
-    setKeyboardLayoutMode(keyboardLayoutMode, { persist: false, render: false });
+    setKeyboardLayoutMode(keyboardLayoutMode, { render: false });
     renderKeyboard();
     setMode(currentMode);
     setPlayButtonAppearance('ready');
