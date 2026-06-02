@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260602-landscape-fix';
+import { AudioEngine } from './audioEngine.js?v=20260602-landscape-fit';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -691,6 +691,33 @@ function drawSheet(beatPosition) {
 
 function getKeyboardMetrics() {
     const isCoarsePointer = window.matchMedia?.('(pointer: coarse)').matches;
+    const viewportWidth = window.visualViewport?.width || window.innerWidth;
+    const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    const mobileLandscape = viewportHeight <= 520 && viewportWidth > viewportHeight && viewportWidth <= 960;
+
+    if (mobileLandscape) {
+        const whiteKeyCount = getWhiteKeys().length || 36;
+        const shellWidth = keyboardContainer?.parentElement?.clientWidth || viewportWidth;
+        const keyboardStyle = keyboardContainer ? window.getComputedStyle(keyboardContainer) : null;
+        const paddingX = keyboardStyle
+            ? (parseFloat(keyboardStyle.paddingLeft) || 0) + (parseFloat(keyboardStyle.paddingRight) || 0)
+            : 8;
+        const whiteKeyMarginX = 2;
+        const safetySpace = 4;
+        const availableWidth = Math.max(shellWidth - paddingX - safetySpace, whiteKeyCount * 10);
+        const fittedWhiteKeyWidth = Math.floor((availableWidth - (whiteKeyCount * whiteKeyMarginX)) / whiteKeyCount);
+        const whiteKeyWidth = Math.max(10, Math.min(36, fittedWhiteKeyWidth));
+        const blackKeyWidth = Math.max(8, Math.round(whiteKeyWidth * 0.58));
+        const blackKeyHeight = '64%';
+
+        return {
+            whiteKeyWidth,
+            blackKeyWidth,
+            blackKeyHeight,
+            key: `fit:${Math.round(shellWidth)}:${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
+        };
+    }
+
     const compactViewport = window.innerWidth <= 720 || window.innerHeight <= 520;
     const whiteKeyWidth = compactViewport ? 36 : isCoarsePointer ? 44 : 40;
     const blackKeyWidth = Math.round(whiteKeyWidth * 0.6);
