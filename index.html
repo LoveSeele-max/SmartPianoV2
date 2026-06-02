@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260602-zoom-fix"></script>
+    <script type="module" src="app.js?v=20260602-landscape-fix"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -505,24 +505,11 @@
 
         @media (max-height: 520px) and (orientation: landscape) {
             header {
-                padding-top: 0.35rem !important;
-                padding-bottom: 0.35rem !important;
+                padding-top: 0.25rem !important;
+                padding-bottom: 0.25rem !important;
             }
             .title-row {
-                display: grid !important;
-                grid-template-columns: 1fr auto 1fr;
-                align-items: center;
-                margin-bottom: 0.25rem !important;
-            }
-            .title-row h1 {
-                position: static !important;
-                transform: none !important;
-                text-align: center;
-                font-size: 0.82rem !important;
-            }
-            .title-row > div:last-child {
-                font-size: 0.58rem !important;
-                line-height: 1.15;
+                display: none !important;
             }
             .song-status-row {
                 display: none !important;
@@ -539,11 +526,12 @@
             }
             .main-control-card {
                 display: grid !important;
-                grid-template-columns: minmax(104px, 1fr) 78px minmax(130px, 1.35fr) 90px 132px;
-                align-items: end !important;
-                gap: 0.45rem !important;
-                padding: 0.45rem 0.55rem !important;
+                grid-template-columns: minmax(112px, 1fr) 76px minmax(150px, 1.4fr) 54px 132px;
+                align-items: center !important;
+                gap: 0.4rem !important;
+                padding: 0.35rem 0.5rem !important;
                 min-height: 0 !important;
+                border-radius: 0.45rem;
             }
             .main-control-card > div {
                 min-width: 0 !important;
@@ -558,41 +546,45 @@
                 display: none;
             }
             .main-control-card .ctrl-label {
-                margin-bottom: 0.18rem;
-                font-size: 0.54rem;
-                letter-spacing: 0.05em;
+                display: none;
             }
             .ctrl-select,
             .ctrl-number {
-                min-height: 30px;
+                min-height: 28px;
                 font-size: 0.72rem;
+                padding-top: 0.22rem;
+                padding-bottom: 0.22rem;
             }
             .volume-control-field > div,
             .metro-control-field > div {
-                height: 30px !important;
+                height: 28px !important;
             }
             #volume-slider {
                 width: 100%;
                 min-width: 0;
             }
+            .volume-control-field .ctrl-value {
+                display: none;
+            }
             .transport-controls {
                 flex-direction: row !important;
-                gap: 0.4rem !important;
+                gap: 0.35rem !important;
             }
             .transport-controls button {
                 flex: 1;
                 min-width: 0 !important;
-                min-height: 32px;
+                min-height: 30px;
                 font-size: 0.74rem !important;
-                padding: 0.25rem 0.35rem !important;
+                padding: 0.22rem 0.35rem !important;
             }
             main {
-                padding: 0.35rem 0.5rem !important;
-                height: clamp(130px, 38dvh, 190px);
-                min-height: 130px;
+                flex: 1 1 auto !important;
+                height: auto !important;
+                min-height: 0;
+                padding: 0.3rem 0.5rem !important;
             }
             #keyboard-shell {
-                height: 118px !important;
+                height: 108px !important;
             }
         }
     </style>
