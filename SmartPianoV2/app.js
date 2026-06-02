@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260602-landscape-fit';
+import { AudioEngine } from './audioEngine.js?v=20260603-compact-keyboard';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -56,6 +56,11 @@ let keyboardMetricsKey = '';
 let keyboardGlobalEventsBound = false;
 const activePointerNotes = new Map();
 const pointerNoteCounts = new Map();
+const KEYBOARD_LAYOUT_STORAGE_KEY = 'smart-piano-v2-keyboard-layout';
+const COMPACT_KEYBOARD_START_MIN = 24;
+const COMPACT_KEYBOARD_START_MAX = 84;
+const COMPACT_KEYBOARD_SPAN = 23;
+let keyboardLayoutMode = getInitialKeyboardLayoutMode();
 
 // Canvas 卷帘窗变量
 let canvasCtx = null;
@@ -122,6 +127,8 @@ const btnSkipBackward = document.getElementById('btn-skip-backward');
 const btnSkipForward = document.getElementById('btn-skip-forward');
 const bpmUI = document.getElementById('bpm-ui');
 const volumeValueUI = document.getElementById('volume-value');
+const keyboardLayoutToggle = document.getElementById('keyboard-layout-toggle');
+const keyboardLayoutValue = document.getElementById('keyboard-layout-value');
 const midiDot = document.getElementById('midi-dot');
 const midiStatusText = document.getElementById('midi-status-text');
 const midiInputSelect = document.getElementById('midi-input-select');
@@ -134,6 +141,79 @@ function updateVolumeDisplay(value) {
     if (!volumeValueUI) return;
     const normalizedVolume = Math.max(0, Math.min(1, parseFloat(value) || 0));
     volumeValueUI.textContent = `${Math.round(normalizedVolume * 100)}%`;
+}
+
+function getInitialKeyboardLayoutMode() {
+    const queryMode = new URLSearchParams(window.location.search).get('keyboard');
+    if (queryMode === 'compact' || queryMode === 'full') return queryMode;
+
+    try {
+        return localStorage.getItem(KEYBOARD_LAYOUT_STORAGE_KEY) === 'compact' ? 'compact' : 'full';
+    } catch (err) {
+        return 'full';
+    }
+}
+
+function isCompactKeyboardMode() {
+    return keyboardLayoutMode === 'compact';
+}
+
+function getWhiteKeysInMidiRange(minMidi, maxMidi) {
+    const keys = [];
+    for (let midi = minMidi; midi <= maxMidi; midi++) {
+        const note = lookupByMidi(midi);
+        if (note?.type === 'white') keys.push(note.name);
+    }
+    return keys;
+}
+
+function getCompactKeyboardWhiteKeys() {
+    const noteMidis = currentSongInfo.data
+        .map(item => item.midi)
+        .filter(midi => Number.isFinite(midi));
+
+    const minMidi = noteMidis.length ? Math.min(...noteMidis) : 60;
+    const maxMidi = noteMidis.length ? Math.max(...noteMidis) : 69;
+    let startMidi = Math.floor(minMidi / 12) * 12;
+
+    if (maxMidi <= startMidi - 12 + COMPACT_KEYBOARD_SPAN) startMidi -= 12;
+    while (maxMidi > startMidi + COMPACT_KEYBOARD_SPAN) startMidi += 12;
+    startMidi = Math.max(COMPACT_KEYBOARD_START_MIN, Math.min(COMPACT_KEYBOARD_START_MAX, startMidi));
+
+    return getWhiteKeysInMidiRange(startMidi, startMidi + COMPACT_KEYBOARD_SPAN);
+}
+
+function getKeyboardWhiteKeys() {
+    if (!isCompactKeyboardMode()) return getWhiteKeys();
+    return getCompactKeyboardWhiteKeys();
+}
+
+function updateKeyboardLayoutToggle() {
+    if (keyboardLayoutToggle) {
+        keyboardLayoutToggle.classList.toggle('on', isCompactKeyboardMode());
+        keyboardLayoutToggle.setAttribute('aria-pressed', String(isCompactKeyboardMode()));
+    }
+    if (keyboardLayoutValue) {
+        keyboardLayoutValue.textContent = isCompactKeyboardMode() ? '2 Oct' : 'Full';
+    }
+}
+
+function setKeyboardLayoutMode(mode, options = {}) {
+    const nextMode = mode === 'compact' ? 'compact' : 'full';
+    const changed = keyboardLayoutMode !== nextMode;
+    keyboardLayoutMode = nextMode;
+    updateKeyboardLayoutToggle();
+
+    if (options.persist !== false) {
+        try {
+            localStorage.setItem(KEYBOARD_LAYOUT_STORAGE_KEY, keyboardLayoutMode);
+        } catch (err) { /* localStorage may be unavailable in private contexts. */ }
+    }
+
+    if (options.render !== false && changed) {
+        renderKeyboard();
+        if (sheetCanvas) drawSheet(currentBeat);
+    }
 }
 
 function normalizeLibraryId(id) {
@@ -694,9 +774,9 @@ function getKeyboardMetrics() {
     const viewportWidth = window.visualViewport?.width || window.innerWidth;
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
     const mobileLandscape = viewportHeight <= 520 && viewportWidth > viewportHeight && viewportWidth <= 960;
+    const whiteKeyCount = getKeyboardWhiteKeys().length || 36;
 
     if (mobileLandscape) {
-        const whiteKeyCount = getWhiteKeys().length || 36;
         const shellWidth = keyboardContainer?.parentElement?.clientWidth || viewportWidth;
         const keyboardStyle = keyboardContainer ? window.getComputedStyle(keyboardContainer) : null;
         const paddingX = keyboardStyle
@@ -704,9 +784,11 @@ function getKeyboardMetrics() {
             : 8;
         const whiteKeyMarginX = 2;
         const safetySpace = 4;
-        const availableWidth = Math.max(shellWidth - paddingX - safetySpace, whiteKeyCount * 10);
+        const maxWhiteKeyWidth = isCompactKeyboardMode() ? 52 : 36;
+        const minWhiteKeyWidth = isCompactKeyboardMode() ? 20 : 10;
+        const availableWidth = Math.max(shellWidth - paddingX - safetySpace, whiteKeyCount * minWhiteKeyWidth);
         const fittedWhiteKeyWidth = Math.floor((availableWidth - (whiteKeyCount * whiteKeyMarginX)) / whiteKeyCount);
-        const whiteKeyWidth = Math.max(10, Math.min(36, fittedWhiteKeyWidth));
+        const whiteKeyWidth = Math.max(minWhiteKeyWidth, Math.min(maxWhiteKeyWidth, fittedWhiteKeyWidth));
         const blackKeyWidth = Math.max(8, Math.round(whiteKeyWidth * 0.58));
         const blackKeyHeight = '64%';
 
@@ -714,12 +796,12 @@ function getKeyboardMetrics() {
             whiteKeyWidth,
             blackKeyWidth,
             blackKeyHeight,
-            key: `fit:${Math.round(shellWidth)}:${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
+            key: `${keyboardLayoutMode}:fit:${whiteKeyCount}:${Math.round(shellWidth)}:${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
         };
     }
 
     const compactViewport = window.innerWidth <= 720 || window.innerHeight <= 520;
-    const whiteKeyWidth = compactViewport ? 36 : isCoarsePointer ? 44 : 40;
+    const whiteKeyWidth = isCompactKeyboardMode() ? (compactViewport ? 46 : isCoarsePointer ? 54 : 50) : compactViewport ? 36 : isCoarsePointer ? 44 : 40;
     const blackKeyWidth = Math.round(whiteKeyWidth * 0.6);
     const blackKeyHeight = compactViewport ? '62%' : '60%';
 
@@ -727,7 +809,7 @@ function getKeyboardMetrics() {
         whiteKeyWidth,
         blackKeyWidth,
         blackKeyHeight,
-        key: `${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
+        key: `${keyboardLayoutMode}:${whiteKeyCount}:${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
     };
 }
 
@@ -825,7 +907,7 @@ function renderKeyboard() {
 
     const { whiteKeyWidth, blackKeyWidth, blackKeyHeight, key } = getKeyboardMetrics();
     keyboardMetricsKey = key;
-    const whiteKeysOnly = getWhiteKeys();
+    const whiteKeysOnly = getKeyboardWhiteKeys();
     const blackKeyPositions = [];
 
     keyboardContainer.style.position = 'relative';
@@ -1602,6 +1684,11 @@ if (metronomeToggle) {
         }
     });
 }
+if (keyboardLayoutToggle) {
+    keyboardLayoutToggle.addEventListener('click', () => {
+        setKeyboardLayoutMode(isCompactKeyboardMode() ? 'full' : 'compact');
+    });
+}
 
 progressSlider.addEventListener('input', (e) => seekToBeat(parseFloat(e.target.value)));
 btnSkipBackward.addEventListener('click', () => seekToBeat(currentBeat - 4));
@@ -1715,6 +1802,7 @@ if (keyboardContainer && keyboardContainer.parentElement) {
 
 export function init() {
     renderSheet();
+    setKeyboardLayoutMode(keyboardLayoutMode, { persist: false, render: false });
     renderKeyboard();
     setMode(currentMode);
     setPlayButtonAppearance('ready');

@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260602-landscape-fit"></script>
+    <script type="module" src="app.js?v=20260603-compact-keyboard"></script>
         <style>
         * { box-sizing: border-box; }
 
@@ -537,7 +537,7 @@
             }
             .main-control-card {
                 display: grid !important;
-                grid-template-columns: minmax(112px, 1fr) 76px minmax(150px, 1.4fr) 54px 132px;
+                grid-template-columns: minmax(94px, 1fr) 70px 70px minmax(128px, 1.25fr) 48px 122px;
                 align-items: center !important;
                 gap: 0.4rem !important;
                 padding: 0.35rem 0.5rem !important;
@@ -551,6 +551,7 @@
             }
             .mode-control-field,
             .bpm-control-field,
+            .keyboard-layout-field,
             .volume-control-field,
             .metro-control-field,
             .transport-controls {
@@ -574,9 +575,15 @@
                 padding-bottom: 0.22rem;
             }
             .volume-control-field > div,
+            .keyboard-layout-field > div,
             .metro-control-field > div {
                 display: flex !important;
                 height: 28px !important;
+            }
+            .keyboard-layout-field .ctrl-value {
+                display: inline-block;
+                min-width: 2rem !important;
+                font-size: 0.64rem;
             }
             #volume-slider {
                 width: 100%;
@@ -691,6 +698,17 @@
                 <div class="bpm-control-field flex flex-col justify-end h-full" style="min-width:80px;">
                     <span class="ctrl-label">Beat Control (BPM)</span>
                     <input type="number" id="bpm-ui" class="ctrl-number" value="100" min="10" max="300">
+                </div>
+
+                <!-- Column: Keyboard layout -->
+                <div class="keyboard-layout-field flex flex-col justify-end h-full" style="min-width:72px;">
+                    <span class="ctrl-label">Keyboard</span>
+                    <div class="flex items-center gap-2" style="height:28px;">
+                        <button type="button" class="tog-track" id="keyboard-layout-toggle" aria-label="Compact keyboard" aria-pressed="false">
+                            <div class="tog-thumb"></div>
+                        </button>
+                        <span id="keyboard-layout-value" class="ctrl-value" style="min-width:2.7rem; text-align:left;">Full</span>
+                    </div>
                 </div>
 
                 <!-- Column: Volume -->
