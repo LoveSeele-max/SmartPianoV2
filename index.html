@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Piano V2 - DAW UI</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#111113">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
+    <script type="module" src="app.js?v=20260602-touch"></script>
+        <style>
+        * { box-sizing: border-box; }
+
+        html,
+        body {
+            overscroll-behavior: none;
+        }
+
+        body {
+            background: #111113;
+            color: #e4e4e7;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        button,
+        input,
+        select {
+            touch-action: manipulation;
+        }
+
+        /* ── Header panel card ── */
+        .hdr-card {
+            background: #1c1c1f;
+            border: 1px solid #2e2e32;
+            border-radius: 0.6rem;
+        }
+
+        /* ── Form controls ── */
+        .ctrl-label {
+            display: block;
+            font-size: 0.62rem;
+            font-weight: 600;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: #71717a;
+            margin-bottom: 0.3rem;
+        }
+        .ctrl-select {
+            appearance: none;
+            background: #09090b;
+            border: 1px solid #3f3f46;
+            border-radius: 0.35rem;
+            color: #d4d4d8;
+            font-size: 0.78rem;
+            padding: 0.32rem 1.6rem 0.32rem 0.55rem;
+            width: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2371717a' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.45rem center;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+        .ctrl-select:focus { outline: none; border-color: #22d3ee; }
+
+        .mode-quick-btn {
+            margin-top: 0.35rem;
+            width: 100%;
+            height: 24px;
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 0.35rem;
+            color: #a1a1aa;
+            cursor: pointer;
+            font-size: 0.68rem;
+            font-weight: 700;
+            line-height: 1;
+            transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+        }
+        .mode-quick-btn:hover,
+        .mode-quick-btn.active {
+            background: rgba(34, 211, 238, 0.12);
+            border-color: #22d3ee;
+            color: #ecfeff;
+            box-shadow: 0 0 12px rgba(34, 211, 238, 0.18);
+        }
+
+        .ctrl-number {
+            background: #09090b;
+            border: 1px solid #3f3f46;
+            border-radius: 0.35rem;
+            color: #22d3ee;
+            font-size: 0.82rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-weight: 700;
+            padding: 0.32rem 0.4rem;
+            width: 100%;
+            text-align: center;
+            transition: border-color 0.15s;
+        }
+        .ctrl-number:focus { outline: none; border-color: #22d3ee; }
+
+        .ctrl-range {
+            width: 94px;
+            accent-color: #22d3ee;
+            cursor: pointer;
+        }
+
+        .ctrl-value {
+            min-width: 2.4rem;
+            color: #22d3ee;
+            font-size: 0.72rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        /* ── Toggle switch ── */
+        .tog-track {
+            width: 34px; height: 18px;
+            background: #3f3f46;
+            border: 0;
+            padding: 0;
+            border-radius: 999px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .tog-track.on { background: #22d3ee; }
+        .tog-thumb {
+            position: absolute;
+            top: 2px; left: 2px;
+            width: 14px; height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        .tog-track.on .tog-thumb { transform: translateX(16px); }
+
+        /* ── MIDI dot ── */
+        .midi-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+        .midi-connected    { background: #4ade80; box-shadow: 0 0 7px #4ade80; }
+        .midi-disconnected { background: #52525b; }
+
+        /* ── Add Sheet button ── */
+        .add-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            background: #09090b;
+            border: 1.5px dashed #3f3f46;
+            border-radius: 0.5rem;
+            color: #71717a;
+            cursor: pointer;
+            font-size: 0.65rem;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: center;
+            padding: 0.5rem 0.75rem;
+            transition: border-color 0.15s, color 0.15s, background 0.15s;
+            white-space: nowrap;
+            min-width: 82px;
+        }
+        .add-btn:hover { border-color: #22d3ee; color: #22d3ee; background: rgba(34,211,238,0.05); }
+        .add-btn .plus { font-size: 1.5rem; line-height: 1; color: #52525b; transition: color 0.15s; }
+        .add-btn:hover .plus { color: #22d3ee; }
+
+        /* ── Sheet table ── */
+        .sh-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+        .sh-table thead th {
+            padding: 0.35rem 0.55rem;
+            text-align: left;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: #71717a;
+            border-bottom: 1px solid #2e2e32;
+            white-space: nowrap;
+            background: #161618;
+        }
+        .sh-table tbody tr { border-bottom: 1px solid #222224; transition: background 0.1s; cursor: pointer; }
+        .sh-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+        .sh-table tbody td { padding: 0.4rem 0.55rem; color: #a1a1aa; white-space: nowrap; }
+        .sh-table tbody td.title-cell { color: #e4e4e7; font-weight: 500; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+
+        .s-ready    { color: #4ade80; font-weight: 700; font-size: 0.65rem; }
+        .s-playing  { color: #22d3ee; font-weight: 700; font-size: 0.65rem; }
+        .s-learning { color: #fb923c; font-weight: 700; font-size: 0.65rem; }
+
+        .act-btn {
+            background: none; border: none;
+            color: #52525b; cursor: pointer;
+            padding: 0.1rem 0.2rem;
+            border-radius: 0.2rem;
+            font-size: 0.7rem;
+            transition: color 0.12s;
+            line-height: 1;
+        }
+        .act-btn:hover { color: #d4d4d8; }
+        .act-btn.del:hover { color: #f87171; }
+
+        /* ── Scrollbar hide ── */
+        .no-sb::-webkit-scrollbar { display: none; }
+        .no-sb { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ── Parse modal ── */
+        .parse-progress { transition: width 0.3s ease; }
+
+        /* ── Sheet canvas ── */
+        #sheet-canvas { cursor: pointer; touch-action: none; }
+
+        .control-strip {
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        .control-strip > .hdr-card {
+            flex-shrink: 0;
+        }
+
+        #keyboard-shell {
+            touch-action: pan-x;
+            overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        #virtual-keyboard {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* ── Piano keys ── */
+        .key-white {
+            background: linear-gradient(180deg, #f0ede4 0%, #ccc5ae 100%);
+            color: #6b6b5a;
+            border: 1px solid #9e9880;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            box-shadow: inset 0 -5px 10px rgba(0,0,0,0.10), 0 3px 7px rgba(0,0,0,0.32);
+            transition: transform 0.07s ease, background 0.07s ease;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .key-black {
+            background: linear-gradient(180deg, #1a1a1c 0%, #000 100%);
+            color: #a1a1aa;
+            border: 1px solid #000;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            box-shadow: 2px 3px 5px rgba(0,0,0,0.65), inset 0 -5px 9px rgba(0,0,0,0.5);
+            transition: transform 0.07s ease, background 0.07s ease;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .key-label {
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-size: 0.5rem;
+            letter-spacing: 0.01em;
+            opacity: 0.72;
+        }
+        .key-pressed.key-white {
+            background: #a5f3fc !important;
+            box-shadow: 0 0 16px #22d3ee, inset 0 0 8px #06b6d4 !important;
+            border-color: #06b6d4 !important;
+            color: #164e63 !important;
+            transform: translateY(2px);
+            transition: none !important;
+        }
+        .key-pressed.key-black {
+            background: linear-gradient(180deg, #0891b2 0%, #083344 100%) !important;
+            box-shadow: 0 0 16px #22d3ee, inset 0 0 9px #67e8f9 !important;
+            border-color: #22d3ee !important;
+            color: #ecfeff !important;
+            transform: translateY(2px) scale(0.97);
+            transition: none !important;
+        }
+
+        @media (pointer: coarse) {
+            .ctrl-select,
+            .ctrl-number {
+                min-height: 34px;
+                font-size: 0.82rem;
+            }
+            .ctrl-range {
+                width: 118px;
+                height: 30px;
+            }
+            .tog-track {
+                width: 42px;
+                height: 24px;
+            }
+            .tog-thumb {
+                width: 20px;
+                height: 20px;
+            }
+            .tog-track.on .tog-thumb { transform: translateX(18px); }
+            #keyboard-shell {
+                height: 152px !important;
+            }
+            .key-label {
+                font-size: 0.56rem;
+            }
+        }
+
+        @media (max-width: 720px) {
+            header {
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+            .control-strip {
+                padding-bottom: 0.15rem;
+            }
+            #keyboard-shell {
+                height: 144px !important;
+            }
+        }
+
+        @media (max-height: 520px) {
+            header {
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+            #keyboard-shell {
+                height: 136px !important;
+            }
+            .key-label {
+                font-size: 0.54rem;
+            }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden select-none">
+
+    <!-- ══════════════════════════════════════════
+         HEADER
+    ══════════════════════════════════════════ -->
+    <header class="shrink-0 px-4 pt-2 pb-2" style="background:#111113; border-bottom:1px solid #222224;">
+
+        <!-- Title row -->
+        <div class="flex items-center mb-2" style="position:relative;">
+            <div style="flex:1;"></div>
+            <h1 class="text-sm font-black tracking-tight text-zinc-100" style="position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;">
+                Smart Piano V2
+            </h1>
+            <div style="flex:1; text-align:right; font-size:0.7rem; color:#71717a;">
+                Device Status:&nbsp;<span id="midi-status-text" style="color:#22d3ee; font-weight:600;">初始化中...</span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 mb-2" style="font-size:0.68rem; color:#71717a; min-height:18px;">
+            <div style="white-space:nowrap;">
+                Current:&nbsp;<span id="current-song-name" style="color:#e4e4e7; font-weight:700;">《小星星》</span>
+            </div>
+            <div style="min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;">
+                Audio:&nbsp;<span id="instruction-text" style="color:#a5f3fc;">内置《小星星》示例曲谱。</span>
+            </div>
+        </div>
+
+        <!-- Controls row -->
+        <div class="control-strip flex gap-2 items-stretch" style="min-height:80px;">
+
+            <!-- ── Device & Mode card ── -->
+            <div class="hdr-card px-3 py-2 flex gap-4 items-start shrink-0">
+
+                <!-- Section title -->
+                <div style="position:absolute; margin-top:-0.1rem;">
+                    <!-- spacer -->
+                </div>
+
+                <!-- Column: section label + MIDI Input -->
+                <div class="flex flex-col justify-between h-full" style="min-width:130px;">
+                    <div class="ctrl-label" style="color:#a1a1aa; font-size:0.65rem; margin-bottom:0.5rem;">Device &amp; Mode</div>
+                    <div>
+                        <span class="ctrl-label">MIDI Input</span>
+                        <div class="flex items-center gap-1.5">
+                            <span id="midi-dot" class="midi-status-dot midi-disconnected"></span>
+                            <select id="midi-input-select" class="ctrl-select" style="min-width:120px;" disabled>
+                                <option>Detecting MIDI...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column: Mode Select -->
+                <div class="flex flex-col justify-end h-full" style="min-width:110px;">
+                    <span class="ctrl-label">Mode Select</span>
+                    <select id="mode-select-native" class="ctrl-select">
+                        <option value="auto">Play</option>
+                        <option value="wait">Practice</option>
+                        <option value="waterfall">Waterfall</option>
+                        <option value="metro">Metronome</option>
+                    </select>
+                    <button id="mode-waterfall" class="mode-quick-btn" type="button" title="Waterfall falling-note mode">Waterfall</button>
+                    <!-- app.js compat -->
+                    <button id="mode-auto" class="hidden"></button>
+                    <button id="mode-wait" class="hidden"></button>
+                    <div id="mode-slider" class="hidden"></div>
+                </div>
+
+                <!-- Column: BPM -->
+                <div class="flex flex-col justify-end h-full" style="min-width:80px;">
+                    <span class="ctrl-label">Beat Control (BPM)</span>
+                    <input type="number" id="bpm-ui" class="ctrl-number" value="100" min="10" max="300">
+                </div>
+
+                <!-- Column: Volume -->
+                <div class="flex flex-col justify-end h-full" style="min-width:126px;">
+                    <span class="ctrl-label">Volume</span>
+                    <div class="flex items-center gap-2" style="height:28px;">
+                        <input type="range" id="volume-slider" class="ctrl-range" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+                        <span id="volume-value" class="ctrl-value">100%</span>
+                    </div>
+                </div>
+
+                <!-- Column: Metronome toggle -->
+                <div class="flex flex-col justify-end h-full">
+                    <span class="ctrl-label">Metronome</span>
+                    <div class="flex items-center" style="height:28px;">
+                        <button type="button" class="tog-track" id="metronome-toggle" aria-label="Metronome" aria-pressed="false">
+                            <div class="tog-thumb"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Column: Play / Reset -->
+                <div class="flex flex-col justify-end h-full gap-1.5">
+                    <button id="btn-play-pause"
+                        style="background:#22c55e; border:none; border-radius:0.35rem; color:#fff; font-size:0.72rem; font-weight:700; padding:0.3rem 1rem; cursor:pointer; min-width:64px; transition:background 0.15s;"
+                        onmouseover="this.style.background='#16a34a'" onmouseout="this.style.background='#22c55e'">
+                        播放
+                    </button>
+                    <button id="btn-reset"
+                        style="background:#27272a; border:1px solid #3f3f46; border-radius:0.35rem; color:#d4d4d8; font-size:0.72rem; font-weight:700; padding:0.3rem 1rem; cursor:pointer; min-width:64px; transition:background 0.15s;"
+                        onmouseover="this.style.background='#3f3f46'" onmouseout="this.style.background='#27272a'">
+                        重置
+                    </button>
+                </div>
+
+            </div><!-- end Device & Mode card -->
+
+            <!-- ── Sheet Library & Actions card ── -->
+            <div class="hdr-card px-3 py-2 flex flex-col" style="flex:1; min-width:0;">
+                <div class="ctrl-label" style="color:#a1a1aa; font-size:0.65rem; margin-bottom:0.4rem;">Sheet Library &amp; Actions</div>
+
+                <div class="flex gap-2" style="flex:1; min-height:0;">
+
+                    <!-- Add Sheet button -->
+                    <label class="add-btn" id="add-sheet-label" for="upload-sheet">
+                        <span class="plus">+</span>
+                        <span>Add Sheet /<br>Import MIDI</span>
+                        <input type="file" id="upload-sheet" accept=".xml,.mxl,.mid,.midi,.json" multiple
+                               style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;">
+                    </label>
+
+                    <!-- Table -->
+                    <div class="no-sb" style="flex:1; overflow:auto; border:1px solid #2a2a2e; border-radius:0.4rem;">
+                        <table class="sh-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:32px;">ID</th>
+                                    <th>Title</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="playlist-container">
+                                <tr>
+                                    <td colspan="5" style="text-align:center; padding:1rem; color:#52525b; font-size:0.7rem;">
+                                        暂无曲谱，点击左侧按钮上传。
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+            </div><!-- end Sheet Library card -->
+
+        </div><!-- end controls row -->
+
+        <!-- Hidden elements required by app.js -->
+        <div style="display:none;">
+            <input type="range" id="progress-slider" min="0" max="100" value="0" step="0.1">
+            <button id="btn-skip-backward"></button>
+            <button id="btn-skip-forward"></button>
+        </div>
+
+    </header>
+
+    <!-- ══════════════════════════════════════════
+         SHEET DISPLAY
+    ══════════════════════════════════════════ -->
+    <main class="flex-1 min-h-0 overflow-hidden px-3 py-2" style="background:#111113;">
+        <div id="sheet-container" class="w-full h-full rounded-xl overflow-hidden"
+             style="background:#0a0e14; border:1px solid #1a2030; box-shadow:inset 0 0 60px rgba(0,0,0,0.55), 0 0 28px rgba(34,211,238,0.05);">
+        </div>
+    </main>
+
+    <!-- ══════════════════════════════════════════
+         PIANO KEYBOARD
+    ══════════════════════════════════════════ -->
+    <footer id="keyboard-shell" class="shrink-0 overflow-x-auto overflow-y-hidden"
+            style="height:128px; background:#18181a; border-top:1px solid #28282c;">
+        <div id="virtual-keyboard"
+             class="relative flex items-stretch justify-center"
+             style="height:100%; min-width:max-content; padding:5px 8px 0;">
+        </div>
+    </footer>
+
+    <!-- ══════════════════════════════════════════
+         PARSE MODAL
+    ══════════════════════════════════════════ -->
+    <div id="parse-modal"
+         class="fixed inset-0 z-50 hidden flex-col items-center justify-center"
+         style="background:rgba(0,0,0,0.82); backdrop-filter:blur(4px);">
+        <div style="background:#1c1c1f; border:1px solid #3f3f46; border-radius:1rem; padding:2rem; min-width:300px; display:flex; flex-direction:column; align-items:center; gap:1rem;">
+            <h2 class="text-sm font-bold text-white" id="parse-modal-title">正在解析曲谱...</h2>
+            <div style="width:100%; height:5px; background:#27272a; border-radius:999px; overflow:hidden;">
+                <div id="parse-progress-bar" class="parse-progress"
+                     style="height:100%; width:0%; background:linear-gradient(90deg,#22d3ee,#34d399); border-radius:999px;"></div>
+            </div>
+            <p style="font-size:0.72rem; color:#71717a;" id="parse-modal-detail">读取文件中...</p>
+        </div>
+    </div>
+
+    <script>
+        const isLocalDev = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+        if (isLocalDev && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations()
+                .then(registrations => registrations.forEach(registration => registration.unregister()));
+            if ('caches' in window) {
+                caches.keys().then(keys => keys.forEach(key => caches.delete(key)));
+            }
+        } else if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(r => console.log('[SW] 注册成功:', r.scope))
+                    .catch(e => console.warn('[SW] 注册失败:', e));
+            });
+        }
+    </script>
+</body>
+</html>
