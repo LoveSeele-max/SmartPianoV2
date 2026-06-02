@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes">
     <title>Smart Piano V2 - DAW UI</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -10,13 +10,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
-    <script type="module" src="app.js?v=20260602-mobile-fix"></script>
+    <script type="module" src="app.js?v=20260602-zoom-fix"></script>
         <style>
         * { box-sizing: border-box; }
 
-        html,
-        body {
-            overscroll-behavior: none;
+        html {
+            background: #111113;
+            min-height: 100%;
         }
 
         body {
@@ -26,6 +26,11 @@
             -webkit-tap-highlight-color: transparent;
             -webkit-user-select: none;
             user-select: none;
+        }
+
+        .app-shell {
+            height: 100dvh;
+            overflow: hidden;
         }
 
         button,
@@ -217,7 +222,10 @@
         .parse-progress { transition: width 0.3s ease; }
 
         /* ── Sheet canvas ── */
-        #sheet-canvas { cursor: pointer; touch-action: none; }
+        #sheet-canvas {
+            cursor: pointer;
+            touch-action: pan-x pan-y pinch-zoom;
+        }
 
         .control-strip {
             overflow-x: auto;
@@ -229,7 +237,7 @@
         }
 
         #keyboard-shell {
-            touch-action: pan-x;
+            touch-action: pan-x pinch-zoom;
             overscroll-behavior-x: contain;
             -webkit-overflow-scrolling: touch;
         }
@@ -321,10 +329,16 @@
             body {
                 width: 100%;
                 max-width: 100%;
-                overflow-x: hidden;
             }
             body {
                 min-width: 0;
+            }
+            .app-shell {
+                height: auto !important;
+                min-height: 100dvh;
+                overflow-x: hidden !important;
+                overflow-y: auto !important;
+                overscroll-behavior-y: auto;
             }
             header {
                 padding-left: 0.5rem !important;
@@ -383,8 +397,8 @@
                 display: grid !important;
                 grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                 align-items: end !important;
-                gap: 0.55rem 0.65rem !important;
-                padding: 0.55rem !important;
+                gap: 0.42rem 0.55rem !important;
+                padding: 0.45rem !important;
             }
             .main-control-card > div {
                 min-width: 0 !important;
@@ -400,28 +414,34 @@
                 letter-spacing: 0.05em;
             }
             .mode-control-field .mode-quick-btn {
-                height: 28px;
+                display: none;
             }
             .volume-control-field {
                 grid-column: 1 / -1;
             }
             .volume-control-field > div {
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) auto;
                 height: 32px !important;
             }
             #volume-slider {
-                width: 100%;
+                width: auto;
                 min-width: 0;
+            }
+            .volume-control-field .ctrl-value {
+                display: none;
             }
             .transport-controls {
                 flex-direction: row !important;
                 align-items: stretch;
+                grid-column: 1 / -1;
             }
             .transport-controls button {
                 flex: 1;
                 min-width: 0 !important;
-                min-height: 38px;
-                font-size: 0.84rem !important;
-                padding: 0.35rem 0.45rem !important;
+                min-height: 34px;
+                font-size: 0.78rem !important;
+                padding: 0.28rem 0.42rem !important;
             }
             .library-card {
                 padding: 0.5rem 0.55rem !important;
@@ -448,6 +468,9 @@
             }
             main {
                 padding: 0.45rem 0.5rem !important;
+                flex: none !important;
+                height: clamp(220px, 36dvh, 360px);
+                min-height: 220px;
             }
             #keyboard-shell {
                 height: 144px !important;
@@ -460,6 +483,10 @@
             }
             .transport-controls {
                 grid-column: 1 / -1;
+            }
+            main {
+                height: clamp(190px, 32dvh, 300px);
+                min-height: 190px;
             }
         }
 
@@ -561,6 +588,8 @@
             }
             main {
                 padding: 0.35rem 0.5rem !important;
+                height: clamp(130px, 38dvh, 190px);
+                min-height: 130px;
             }
             #keyboard-shell {
                 height: 118px !important;
@@ -568,7 +597,7 @@
         }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden select-none">
+<body class="app-shell flex flex-col select-none">
 
     <!-- ══════════════════════════════════════════
          HEADER
