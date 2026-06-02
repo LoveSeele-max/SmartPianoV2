@@ -4,14 +4,14 @@
  * 实现"二次秒开"，甚至在断网环境下也能正常使用
  */
 
-const CACHE_NAME = 'smart-piano-v2-cache-v19';
+const CACHE_NAME = 'smart-piano-v2-cache-v20';
 
 // 需要预缓存的资源
 const PRECACHE_URLS = [
     './',
     './index.html',
-    './app.js?v=20260602-landscape-fix',
-    './audioEngine.js?v=20260602-landscape-fix',
+    './app.js?v=20260602-landscape-fit',
+    './audioEngine.js?v=20260602-landscape-fit',
     './midiController.js',
     './parser.js',
     './noteMap.js',
