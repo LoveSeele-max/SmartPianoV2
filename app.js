@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260602-mobile-fix';
+import { AudioEngine } from './audioEngine.js?v=20260602-zoom-fix';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
