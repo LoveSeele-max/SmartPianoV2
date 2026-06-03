@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260603-fixed-compact-keyboard';
+import { AudioEngine } from './audioEngine.js?v=20260603-pc-compact-keyboard';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -779,12 +779,13 @@ function getKeyboardMetrics() {
     const whiteKeyWidth = isCompactKeyboardMode() ? (compactViewport ? 46 : isCoarsePointer ? 54 : 50) : compactViewport ? 36 : isCoarsePointer ? 44 : 40;
     const blackKeyWidth = Math.round(whiteKeyWidth * 0.6);
     const blackKeyHeight = compactViewport ? '62%' : '60%';
+    const shellWidth = keyboardContainer?.parentElement?.clientWidth || viewportWidth;
 
     return {
         whiteKeyWidth,
         blackKeyWidth,
         blackKeyHeight,
-        key: `${keyboardLayoutMode}:${whiteKeyCount}:${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
+        key: `${keyboardLayoutMode}:${whiteKeyCount}:${Math.round(shellWidth)}:${whiteKeyWidth}:${blackKeyWidth}:${blackKeyHeight}`
     };
 }
 
@@ -927,6 +928,10 @@ function renderKeyboard() {
     });
 
     // 第2遍：叠加黑键
+    const keyboardRect = keyboardContainer.getBoundingClientRect();
+    const firstWhiteRect = keyboardContainer.querySelector('.key-white')?.getBoundingClientRect();
+    const keyLayoutOffset = firstWhiteRect ? firstWhiteRect.left - keyboardRect.left : 0;
+
     blackKeyPositions.forEach(({ left, name, midi }) => {
         const keyDiv = document.createElement('div');
         keyDiv.id = `key-${midi}`;
@@ -934,7 +939,7 @@ function renderKeyboard() {
         keyDiv.className = 'key-black absolute flex items-end justify-center pb-4 text-[9px] font-bold cursor-pointer z-10';
         keyDiv.style.width = `${blackKeyWidth}px`;
         keyDiv.style.height = blackKeyHeight;
-        keyDiv.style.left = `${left}px`;
+        keyDiv.style.left = `${left + keyLayoutOffset}px`;
         keyDiv.style.top = '0';
         const keyLabel = document.createElement('span');
         keyLabel.className = 'key-label';
