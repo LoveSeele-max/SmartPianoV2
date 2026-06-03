@@ -3,7 +3,7 @@
  * 负责串联 UI、播放状态机（练习模式/自动播放）、节拍器和进度条逻辑
  */
 
-import { AudioEngine } from './audioEngine.js?v=20260603-pc-compact-keyboard';
+import { AudioEngine } from './audioEngine.js?v=20260603-pc-compact-align';
 import { MidiController } from './midiController.js';
 import { parseSheetFile, parseMusicXML } from './parser.js';
 import { getNoteInfo, lookupByMidi, getWhiteKeys } from './noteMap.js';
@@ -795,6 +795,17 @@ function getPointerKeyMidi(target) {
     return Number.isFinite(midi) ? midi : null;
 }
 
+function getKeyboardLayoutOffset(whiteKeyCount, whiteKeyWidth) {
+    const keyboardStyle = window.getComputedStyle(keyboardContainer);
+    const paddingLeft = parseFloat(keyboardStyle.paddingLeft) || 0;
+    const paddingRight = parseFloat(keyboardStyle.paddingRight) || 0;
+    const whiteKeyMarginX = 2;
+    const contentWidth = Math.max(0, keyboardContainer.clientWidth - paddingLeft - paddingRight);
+    const whiteKeyLineWidth = whiteKeyCount * (whiteKeyWidth + whiteKeyMarginX);
+    const centeredSpace = Math.max(0, (contentWidth - whiteKeyLineWidth) / 2);
+    return paddingLeft + centeredSpace + (whiteKeyMarginX / 2);
+}
+
 function getPointerKeyMidiFromPoint(clientX, clientY) {
     return getPointerKeyMidi(document.elementFromPoint(clientX, clientY));
 }
@@ -928,9 +939,7 @@ function renderKeyboard() {
     });
 
     // 第2遍：叠加黑键
-    const keyboardRect = keyboardContainer.getBoundingClientRect();
-    const firstWhiteRect = keyboardContainer.querySelector('.key-white')?.getBoundingClientRect();
-    const keyLayoutOffset = firstWhiteRect ? firstWhiteRect.left - keyboardRect.left : 0;
+    const keyLayoutOffset = getKeyboardLayoutOffset(whiteKeysOnly.length, whiteKeyWidth);
 
     blackKeyPositions.forEach(({ left, name, midi }) => {
         const keyDiv = document.createElement('div');
